@@ -11,15 +11,22 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -42,6 +49,7 @@ import com.beyondmaps.viewmodel.ChatMessage
 import com.beyondmaps.viewmodel.ChatViewModel
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun ChatScreen(
     navController: NavHostController,
     viewModel: ChatViewModel = viewModel(),
@@ -49,15 +57,42 @@ fun ChatScreen(
     val messages by viewModel.messages.collectAsState()
     val isThinking by viewModel.isThinking.collectAsState()
     val input by viewModel.inputText.collectAsState()
+    val imeVisible = WindowInsets.isImeVisible
 
     Box(modifier = Modifier.fillMaxSize()) {
         AtmosphereBackground()
-        Column(modifier = Modifier.fillMaxSize().zIndex(1f)) {
-            ChatTopBar(onBack = { navController.navigateUp() })
+        Scaffold(
+            modifier = Modifier.fillMaxSize().zIndex(1f),
+            containerColor = Color.Transparent,
+            contentColor = Color.Transparent,
+            contentWindowInsets = WindowInsets.safeDrawing,
+            topBar = { ChatTopBar(onBack = { navController.navigateUp() }) },
+            bottomBar = {
+                ChatInputBar(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (imeVisible) {
+                                Modifier.imePadding()
+                            } else {
+                                Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                            }
+                        ),
+                    value = input,
+                    onValueChange = { viewModel.inputText.value = it },
+                    isThinking = isThinking,
+                    onSend = { viewModel.sendMessage(input) },
+                    onStop = { viewModel.onStop() },
+                    placeholder = "Ask anything about Tokyo...",
+                    destination = "Tokyo, Japan",
+                    entryCount = "2,400 entries",
+                )
+            },
+        ) { innerPadding ->
             LazyColumn(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxSize()
+                    .padding(innerPadding),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 content = {
                     itemsIndexed(messages) { _, msg ->
@@ -85,11 +120,6 @@ fun ChatScreen(
                     }
                 },
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            )
-            ChatInputBar(
-                value = input,
-                onValueChange = { viewModel.inputText.value = it },
-                onSend = { viewModel.sendMessage(input) },
             )
         }
     }
@@ -119,7 +149,7 @@ private fun ChatTopBar(onBack: () -> Unit) {
             Text(
                 text = "Tokyo, Japan",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF283450),
+                color = Color(0xFF5D7398),
             )
         }
         androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))

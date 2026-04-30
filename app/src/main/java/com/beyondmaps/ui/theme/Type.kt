@@ -34,25 +34,25 @@ val AppTypography = Typography(
     bodyMedium = TextStyle(
         fontFamily = dmSansFamily,
         fontWeight = FontWeight.Light,
-        fontSize = 13.sp,
-        lineHeight = 22.sp,
+        fontSize = 14.sp,
+        lineHeight = 24.sp,
     ),
     bodySmall = TextStyle(
         fontFamily = dmSansFamily,
         fontWeight = FontWeight.Light,
-        fontSize = 12.sp,
-        lineHeight = 20.sp,
+        fontSize = 13.sp,
+        lineHeight = 21.sp,
     ),
     labelSmall = TextStyle(
         fontFamily = dmSansFamily,
         fontWeight = FontWeight.Light,
-        fontSize = 10.sp,
+        fontSize = 11.sp,
         letterSpacing = 0.3.sp,
     ),
     labelMedium = TextStyle(
         fontFamily = dmSansFamily,
         fontWeight = FontWeight.Light,
-        fontSize = 11.sp,
-        lineHeight = 17.sp,
+        fontSize = 12.sp,
+        lineHeight = 18.sp,
     ),
 )

@@ -2,6 +2,7 @@ package com.beyondmaps.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,7 @@ class ChatViewModel : ViewModel() {
     val isThinking: StateFlow<Boolean> = _isThinking.asStateFlow()
 
     val inputText = MutableStateFlow("")
+    private var inferenceJob: Job? = null
 
     fun sendMessage(text: String) {
         if (text.isBlank()) return
@@ -38,7 +40,8 @@ class ChatViewModel : ViewModel() {
         inputText.value = ""
         _isThinking.value = true
 
-        viewModelScope.launch {
+        inferenceJob?.cancel()
+        inferenceJob = viewModelScope.launch {
             delay(1500)
             val response = replies[replyIndex % replies.size]
             replyIndex++
@@ -48,5 +51,10 @@ class ChatViewModel : ViewModel() {
             )
             _isThinking.value = false
         }
+    }
+
+    fun onStop() {
+        inferenceJob?.cancel()
+        _isThinking.value = false
     }
 }
