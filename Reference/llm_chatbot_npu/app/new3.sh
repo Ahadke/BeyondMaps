@@ -1,0 +1,1 @@
+adb push ~/Downloads/FastVLM-0.5B.qualcomm.sm8750.litertlm /sdcard/Android/data/com.example.qnn_litertlm_gemma/files/FastVLM-0.5B.qualcomm.sm8750.litertlm

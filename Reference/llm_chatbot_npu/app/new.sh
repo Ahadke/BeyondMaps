@@ -1,0 +1,1 @@
+adb shell mkdir -p /sdcard/Android/data/com.example.qnn_litertlm_gemma/files/
