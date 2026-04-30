@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -130,6 +131,7 @@ private fun ChatTopBar(onBack: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .border(0.5.dp, BorderSubtle)
             .padding(top = 16.dp, start = 18.dp, end = 18.dp, bottom = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
