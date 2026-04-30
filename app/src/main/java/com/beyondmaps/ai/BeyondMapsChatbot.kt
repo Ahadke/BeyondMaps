@@ -9,9 +9,16 @@ class BeyondMapsChatbot(private val context: Context) {
     private val resolver = ModelResolver(context)
 
     suspend fun initialize(): Result<Boolean> {
-        Log.i(TAG, "Model exists at: ${resolver.expectedPath()}")
+        val expectedPath = resolver.expectedPath()
+        Log.i(TAG, "Expected model path: $expectedPath")
+
+        val modelPath = runCatching { resolver.getModelPath() }.getOrElse { error ->
+            Log.e(TAG, "Model validation failed: ${error.message}", error)
+            return Result.failure(error)
+        }
+
         return manager.initialize(
-            modelPath = resolver.getModelPath(),
+            modelPath = modelPath,
             systemPrompt = SYSTEM_PROMPT,
             preferredBackend = "NPU",
             supportsImage = true,
