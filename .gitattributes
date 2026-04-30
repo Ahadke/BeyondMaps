@@ -1,4 +1,0 @@
-dataset/raw/*.bz2 filter=lfs diff=lfs merge=lfs -text
-dataset/raw/*.pbf filter=lfs diff=lfs merge=lfs -text
-dataset/raw/*.csv filter=lfs diff=lfs merge=lfs -text
-dataset/output/*.npy filter=lfs diff=lfs merge=lfs -text
