@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -86,7 +87,7 @@ fun AiBubble(text: String, sources: List<String>?) {
                         ) {
                             Text(
                                 text = it,
-                                color = Color(0xFF28405E),
+                                color = Color(0xFF6F88AD),
                                 style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.2.sp),
                             )
                         }
@@ -99,7 +100,10 @@ fun AiBubble(text: String, sources: List<String>?) {
 
 @Composable
 fun UserBubble(text: String) {
-    Box(contentAlignment = Alignment.CenterEnd, modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.CenterEnd,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         Box(
             modifier = Modifier
                 .background(
