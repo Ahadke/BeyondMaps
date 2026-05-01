@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.beyondmaps.ai.BeyondMapsChatbot
 import com.beyondmaps.ai.OnDeviceOcr
+import com.beyondmaps.data.rag.PackImportRepository
 import com.beyondmaps.rag.vector.LightweightQueryEmbedder
 import com.beyondmaps.rag.vector.QueryEmbedder
 import com.beyondmaps.rag.vector.VectorPackLoader
@@ -48,6 +49,7 @@ enum class ImageUseCase {
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val chatbot = BeyondMapsChatbot(application.applicationContext)
     private val onDeviceOcr = OnDeviceOcr(application.applicationContext)
+    private val packImportRepository = PackImportRepository(application.applicationContext)
     private val vectorPackLoader = VectorPackLoader(application.applicationContext)
     private val startupMutex = Mutex()
     private var startupTravelReady = false
@@ -85,6 +87,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             _isThinking.value = false
+        }
+    }
+
+    private suspend fun ensureLocalPackImported() {
+        val result = withContext(Dispatchers.IO) { packImportRepository.ensureImported() }
+        if (result.isFailure) {
+            val error = result.exceptionOrNull()
+            Log.w(TAG, "Local pack import skipped/failed: ${error?.message}", error)
         }
     }
 

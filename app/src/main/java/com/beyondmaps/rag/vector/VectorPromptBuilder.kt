@@ -17,6 +17,8 @@ class VectorPromptBuilder {
             appendLine("If relevant context is listed, answer using it directly.")
             appendLine("Do not answer from general knowledge.")
             appendLine("Do not say you lack information if the context contains relevant places, phrases, or transit info.")
+            appendLine("Copy prices, times, place names, and ticket validity exactly as written in the context.")
+            appendLine("If multiple useful facts appear, give a short traveler-friendly answer with the exact numbers.")
             appendLine()
             appendLine("Local context:")
             if (results.isEmpty()) {
@@ -28,8 +30,6 @@ class VectorPromptBuilder {
                     appendLine("Title: ${result.chunk.title}")
                     appendLine("Source: ${result.chunk.source}")
                     appendLine("Distance: ${formatDistance(result.distanceKm)}")
-                    appendLine("Vector score: ${formatScore(result.vectorScore)}")
-                    appendLine("Final score: ${formatScore(result.finalScore)}")
                     appendLine("Text: ${truncate(result.chunk.text, 700)}")
                     appendLine()
                 }
@@ -46,8 +46,6 @@ class VectorPromptBuilder {
 
     private fun truncate(text: String, maxChars: Int): String =
         if (text.length <= maxChars) text else text.take(maxChars).trimEnd() + "..."
-
-    private fun formatScore(score: Float): String = String.format("%.4f", score)
 
     private fun formatDistance(distanceKm: Double?): String =
         if (distanceKm == null) "unknown" else String.format("%.2f km", distanceKm)

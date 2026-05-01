@@ -13,8 +13,7 @@ interface QueryEmbedder {
  * Lightweight on-device query embedder:
  * builds a query vector as a weighted centroid of top lexical matches.
  *
- * This avoids hardcoded answer selection while a dedicated on-device query
- * encoder is not yet bundled.
+ * This is a practical drop-in for demos when a full encoder runtime is not yet wired.
  */
 class LightweightQueryEmbedder(private val chunks: List<VectorChunk>) : QueryEmbedder {
     override val modelName: String = "all-MiniLM-L6-v2"
@@ -65,8 +64,8 @@ class LightweightQueryEmbedder(private val chunks: List<VectorChunk>) : QueryEmb
     }
 
     private fun lexicalScore(queryTokens: Set<String>, chunk: VectorChunk): Float {
-        val haystack = "${chunk.title} ${chunk.text} ${chunk.category}".lowercase(Locale.ROOT)
-        val matched = queryTokens.count { token -> haystack.contains(token) }
+        val hay = "${chunk.title} ${chunk.text} ${chunk.category}".lowercase(Locale.ROOT)
+        val matched = queryTokens.count { hay.contains(it) }
         if (matched == 0) return 0f
         val base = matched.toFloat() / queryTokens.size.toFloat()
         val titleBoost = if (queryTokens.any { chunk.title.lowercase(Locale.ROOT).contains(it) }) 0.15f else 0f
