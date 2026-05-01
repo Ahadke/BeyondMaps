@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.beyondmaps.ai.BeyondMapsChatbot
+import com.beyondmaps.ai.OnDeviceOcr
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -16,8 +17,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileOutputStream
 
 sealed class ChatMessage {
     data class Ai(
@@ -34,6 +33,7 @@ sealed class ChatMessage {
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val chatbot = BeyondMapsChatbot(application.applicationContext)
+    private val onDeviceOcr = OnDeviceOcr(application.applicationContext)
     private val startupMutex = Mutex()
     private var startupTravelReady = false
 
@@ -94,58 +94,50 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         inferenceJob?.cancel()
         inferenceJob = viewModelScope.launch {
             try {
-                val useOcr = hadImage
-                val imagePath = if (useOcr) {
-                    withContext(Dispatchers.IO) { copyUriToImageFile(imageUri!!) }
-                } else {
-                    null
-                }
-
-                if (useOcr && imagePath == null) {
-                    _messages.value = _messages.value + ChatMessage.Ai(
-                        "I couldn\u2019t read that image. Try another photo or pick from Gallery again."
-                    )
-                    return@launch
-                }
-
-                val engineOk = withContext(Dispatchers.IO) {
-                    if (useOcr) {
-                        chatbot.ensureFastVlmModel()
-                    } else {
-                        chatbot.ensureTravelModel()
-                    }
-                }
+                val useImageFlow = hadImage
+                val engineOk = withContext(Dispatchers.IO) { chatbot.ensureTravelModel() }
                 if (engineOk.isFailure) {
                     val err = engineOk.exceptionOrNull()?.message
                         ?: "The offline model is not ready."
-                    _messages.value = _messages.value + ChatMessage.Ai(err, isOcr = useOcr)
+                    _messages.value = _messages.value + ChatMessage.Ai(err, isOcr = useImageFlow)
                     return@launch
+                }
+
+                val modelPrompt = if (useImageFlow) {
+                    val extracted = withContext(Dispatchers.IO) {
+                        onDeviceOcr.extractText(imageUri!!)
+                    }
+                    if (extracted.isBlank()) {
+                        _messages.value = _messages.value + ChatMessage.Ai(
+                            "I couldn't detect readable text in that image. Try a clearer photo or crop tighter."
+                        )
+                        return@launch
+                    }
+                    buildGemmaPromptFromOcr(userPrompt = prompt, extractedText = extracted)
+                } else {
+                    prompt
                 }
 
                 var response = ""
                 var assistantMessageAdded = false
                 withContext(Dispatchers.IO) {
-                    val stream = if (useOcr) {
-                        chatbot.sendOcrMessage(prompt, imagePath!!)
-                    } else {
-                        chatbot.sendMessage(prompt)
-                    }
+                    val stream = chatbot.sendMessage(modelPrompt)
                     stream.collect { chunk ->
                         if (chunk.isEmpty()) return@collect
                         response += chunk
                         withContext(Dispatchers.Main) {
                             if (!assistantMessageAdded) {
-                                _messages.value = _messages.value + ChatMessage.Ai(response, isOcr = useOcr)
+                                _messages.value = _messages.value + ChatMessage.Ai(response, isOcr = useImageFlow)
                                 assistantMessageAdded = true
                             } else {
-                                replaceLastAssistantMessage(response, useOcr)
+                                replaceLastAssistantMessage(response, useImageFlow)
                             }
                         }
                     }
                 }
 
                 if (response.isBlank()) {
-                    _messages.value = _messages.value + ChatMessage.Ai("No response generated.", isOcr = useOcr)
+                    _messages.value = _messages.value + ChatMessage.Ai("No response generated.", isOcr = useImageFlow)
                 }
             } catch (_: CancellationException) {
                 // Expected when the user taps stop.
@@ -198,17 +190,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun copyUriToImageFile(uri: Uri): String? = withContext(Dispatchers.IO) {
-        try {
-            val app = getApplication<Application>()
-            val dest = File(app.cacheDir, "ocr_${System.currentTimeMillis()}.jpg")
-            app.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(dest).use { output -> input.copyTo(output) }
-            } ?: return@withContext null
-            dest.absolutePath
-        } catch (e: Exception) {
-            Log.e(TAG, "copyUriToImageFile failed", e)
-            null
+    private fun buildGemmaPromptFromOcr(userPrompt: String, extractedText: String): String {
+        val request = userPrompt.ifBlank {
+            "Translate the extracted text to English and explain what it means."
+        }
+        return buildString {
+            appendLine("The following text was extracted locally using OCR from an image.")
+            appendLine("Use only this extracted text. If information is missing, say so.")
+            appendLine("If the text is not English, translate it to English first.")
+            appendLine("Then explain the translated meaning clearly and briefly.")
+            appendLine("If the user asks a specific question, answer it using the translated text.")
+            appendLine()
+            appendLine("User request: $request")
+            appendLine()
+            appendLine("Extracted OCR text:")
+            appendLine(extractedText)
         }
     }
 
