@@ -10,3 +10,8 @@ captures/
 .cxx/
 Reference/
 *.litertlm
+
+.venv*/
+.tmp/
+.hf-cache/
+artifacts/

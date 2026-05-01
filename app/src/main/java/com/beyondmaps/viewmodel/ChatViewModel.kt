@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.beyondmaps.ai.BeyondMapsChatbot
 import com.beyondmaps.ai.OnDeviceOcr
+import com.beyondmaps.data.rag.PackImportRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -43,6 +44,7 @@ enum class ImageUseCase {
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val chatbot = BeyondMapsChatbot(application.applicationContext)
     private val onDeviceOcr = OnDeviceOcr(application.applicationContext)
+    private val packImportRepository = PackImportRepository(application.applicationContext)
     private val startupMutex = Mutex()
     private var startupTravelReady = false
 
@@ -66,6 +68,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             _isThinking.value = true
+            ensureLocalPackImported()
             val ready = ensureTravelAtStartup()
             _messages.value = if (ready) {
                 listOf(ChatMessage.Ai("Your offline guide is ready. Ask me anything."))
@@ -77,6 +80,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             _isThinking.value = false
+        }
+    }
+
+    private suspend fun ensureLocalPackImported() {
+        val result = withContext(Dispatchers.IO) { packImportRepository.ensureImported() }
+        if (result.isFailure) {
+            val error = result.exceptionOrNull()
+            Log.w(TAG, "Local pack import skipped/failed: ${error?.message}", error)
         }
     }
 
