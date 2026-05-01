@@ -32,7 +32,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,23 +65,23 @@ fun FeatureCard(
     val shape = RoundedCornerShape(22.dp)
     val breathingTransition = rememberInfiniteTransition(label = "cardEdgeGlow")
     val edgeGlowAlpha by breathingTransition.animateFloat(
-        initialValue = 0.12f,
-        targetValue = 0.28f,
+        initialValue = 0.08f,
+        targetValue = 0.2f,
         animationSpec = infiniteRepeatable(animation = tween(2600)),
         label = "edgeGlowAlpha",
     )
     val cardBackground = Brush.linearGradient(
         colors = if (isPressed) {
             listOf(
-                Color(0x1A1F3150),
-                Color(0x14294576),
-                Color(0x10243A60),
+                Color(0x161B2436),
+                accentColor.copy(alpha = 0.18f),
+                Color(0x120F1726),
             )
         } else {
             listOf(
-                Color(0x161D2D49),
-                Color(0x1226406A),
-                Color(0x0F233959),
+                Color(0x1418202F),
+                accentColor.copy(alpha = 0.11f),
+                Color(0x100D1422),
             )
         }
     )

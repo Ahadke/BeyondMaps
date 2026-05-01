@@ -34,6 +34,10 @@ import com.beyondmaps.ui.theme.TextSecondary
 
 @Composable
 fun AiBubble(text: String, sources: List<String>?) {
+    val isError = text.contains("could not start the offline model", ignoreCase = true) ||
+        text.contains("offline model is not ready", ignoreCase = true) ||
+        text.contains("failed while generating", ignoreCase = true)
+
     Row(verticalAlignment = Alignment.Top) {
         Box(
             modifier = Modifier
@@ -58,21 +62,31 @@ fun AiBubble(text: String, sources: List<String>?) {
             Box(
                 modifier = Modifier
                     .background(
-                        BgAiBubble,
-                        RoundedCornerShape(topStart = 4.dp, topEnd = 13.dp, bottomEnd = 13.dp, bottomStart = 13.dp),
+                        if (isError) Color(0x151C3457) else BgAiBubble,
+                        RoundedCornerShape(topStart = 6.dp, topEnd = 14.dp, bottomEnd = 14.dp, bottomStart = 14.dp),
                     )
                     .border(
-                        0.5.dp,
-                        BorderCard,
-                        RoundedCornerShape(topStart = 4.dp, topEnd = 13.dp, bottomEnd = 13.dp, bottomStart = 13.dp),
+                        if (isError) 0.7.dp else 0.5.dp,
+                        if (isError) Color(0x34568FDC) else BorderCard,
+                        RoundedCornerShape(topStart = 6.dp, topEnd = 14.dp, bottomEnd = 14.dp, bottomStart = 14.dp),
                     )
-                    .padding(vertical = 10.dp, horizontal = 13.dp)
+                    .padding(vertical = 11.dp, horizontal = 14.dp)
             ) {
-                Text(
-                    text = parseHighlighted(text),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
-                )
+                Column {
+                    Text(
+                        text = parseHighlighted(text),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isError) Color(0xFFA5C2E8) else TextSecondary,
+                    )
+                    if (isError) {
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text(
+                            text = "If this keeps happening, verify local model files and retry.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF6E88AB),
+                        )
+                    }
+                }
             }
             if (!sources.isNullOrEmpty()) {
                 Row(

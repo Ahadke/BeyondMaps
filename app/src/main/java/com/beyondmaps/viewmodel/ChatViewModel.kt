@@ -27,7 +27,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var isInitialized = false
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(
-        listOf(ChatMessage.Ai("Loading offline travel guide model..."))
+        listOf(ChatMessage.Ai("Preparing your offline guide..."))
     )
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
@@ -42,11 +42,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _isThinking.value = true
             val ready = ensureInitialized()
             _messages.value = if (ready) {
-                listOf(ChatMessage.Ai("Offline travel guide is ready. Ask me anything."))
+                listOf(ChatMessage.Ai("Your offline guide is ready. Ask me anything."))
             } else {
                 listOf(
                     ChatMessage.Ai(
-                        "I could not start the offline model. Check Logcat and confirm model.litertlm is installed."
+                        "I couldn\u2019t start the offline guide right now. Please verify the local model is installed and try again."
                     )
                 )
             }
@@ -67,7 +67,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 if (!ensureInitialized()) {
                     _messages.value = _messages.value + ChatMessage.Ai(
-                        "The offline model is not ready. Confirm model.litertlm is at the app files path."
+                        "I couldn\u2019t start the offline guide right now. Please verify the local model is installed and try again."
                     )
                     return@launch
                 }
@@ -97,7 +97,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Throwable) {
                 Log.e(TAG, "Chat generation failed: ${e.message}", e)
                 _messages.value = _messages.value + ChatMessage.Ai(
-                    "The offline model failed while generating a response. Check Logcat for details."
+                    "I ran into a problem while generating that response. Please try again in a moment."
                 )
             } finally {
                 _isThinking.value = false

@@ -4,6 +4,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,6 +37,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -85,8 +89,6 @@ fun ChatScreen(
                     onSend = { viewModel.sendMessage(input) },
                     onStop = { viewModel.onStop() },
                     placeholder = "Ask anything about Tokyo...",
-                    destination = "Tokyo, Japan",
-                    entryCount = "2,400 entries",
                 )
             },
         ) { innerPadding ->
@@ -136,18 +138,10 @@ private fun ChatTopBar(onBack: () -> Unit) {
             .padding(top = 16.dp, start = 18.dp, end = 18.dp, bottom = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .background(Color.Transparent, CircleShape)
-                .border(0.5.dp, Color(0xFF2A3C5A), CircleShape)
-                .padding(7.dp)
-                .background(Color(0xFF2A3C5A), CircleShape)
-                .noRippleClickable(onBack),
-        )
+        AnimatedAssistantAvatar(modifier = Modifier.noRippleClickable(onBack))
         androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(10.dp))
         Column {
-            Text(text = "Travel Guide", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+            Text(text = "BeyondMaps", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
             Text(
                 text = "Tokyo, Japan",
                 style = MaterialTheme.typography.labelSmall,
@@ -155,12 +149,53 @@ private fun ChatTopBar(onBack: () -> Unit) {
             )
         }
         androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+        LiveStatusDot()
+    }
+}
+
+@Composable
+private fun AnimatedAssistantAvatar(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "assistantAvatar")
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0.82f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2200)),
+        label = "avatarPulse",
+    )
+    Box(
+        modifier = modifier
+            .size(30.dp)
+            .background(
+                brush = Brush.radialGradient(
+                    listOf(Color(0x442C79EE), Color(0x223267B3), Color(0x0F1E3668))
+                ),
+                shape = CircleShape,
+            )
+            .border(0.75.dp, Color(0x3F6EAFFF), CircleShape),
+    ) {
         Box(
             modifier = Modifier
-                .size(5.dp)
-                .background(Color(0xFF1A3360), CircleShape),
+                .align(Alignment.Center)
+                .size(8.dp * pulse)
+                .background(Color(0xFF77B6FF), CircleShape),
         )
     }
+}
+
+@Composable
+private fun LiveStatusDot() {
+    val infiniteTransition = rememberInfiniteTransition(label = "statusDot")
+    val dotAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1800)),
+        label = "dotAlpha",
+    )
+    Box(
+        modifier = Modifier
+            .size(6.dp)
+            .background(Color(0xFF56DBC0).copy(alpha = dotAlpha), CircleShape),
+    )
 }
 
 private fun Modifier.noRippleClickable(onClick: () -> Unit): Modifier {

@@ -10,12 +10,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,7 +48,6 @@ import com.beyondmaps.ui.theme.AccentBlue
 import com.beyondmaps.ui.theme.AccentGold
 import com.beyondmaps.ui.theme.AccentGreen
 import com.beyondmaps.ui.theme.AccentPurple
-import com.beyondmaps.ui.theme.BgCard
 import com.beyondmaps.ui.theme.BorderSubtle
 import com.beyondmaps.ui.theme.TextDim
 import com.beyondmaps.ui.theme.TextGhost
@@ -89,7 +95,9 @@ fun HomeScreen(navController: NavHostController) {
                 .zIndex(1f)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 48.dp),
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 24.dp),
         ) {
             Text(
                 text = buildAnnotatedString {
@@ -107,34 +115,10 @@ fun HomeScreen(navController: NavHostController) {
             )
 
             Spacer(modifier = Modifier.height(20.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(BgCard, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-                    .border(0.5.dp, BorderSubtle, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text(
-                        text = "Current destination",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextGhost,
-                    )
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "Tokyo, Japan",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Normal),
-                        color = TextSecondary,
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = "Ready",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF25436A),
-                )
-            }
+            DestinationStatusCard(
+                destination = "Tokyo, Japan",
+                status = "Ready",
+            )
 
             Spacer(modifier = Modifier.height(22.dp))
             for (i in features.indices step 2) {
@@ -169,16 +153,87 @@ fun HomeScreen(navController: NavHostController) {
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text = "On-device · No connection required",
-                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.4.sp),
-                color = TextGhost,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(0.5.dp, BorderSubtle.copy(alpha = 0.04f))
-                    .padding(top = 14.dp),
+            Spacer(modifier = Modifier.height(18.dp))
+            OfflineTrustBadge(
+                text = "On-device AI \u00b7 No connection required",
             )
         }
+    }
+}
+
+@Composable
+private fun DestinationStatusCard(
+    destination: String,
+    status: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(Color(0x141D2A44), Color(0x0F223557), Color(0x121B2B45))
+                ),
+                shape = RoundedCornerShape(22.dp),
+            )
+            .border(0.6.dp, Color(0x24FFFFFF), RoundedCornerShape(22.dp))
+            .padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column {
+            Text(
+                text = "Current destination",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextGhost,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = destination,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                color = TextPrimary,
+            )
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        Row(
+            modifier = Modifier
+                .background(Color(0x1E1B5A48), RoundedCornerShape(999.dp))
+                .border(0.5.dp, Color(0x3352D3A9), RoundedCornerShape(999.dp))
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(5.dp)
+                    .background(Color(0xFF6EF2C5), CircleShape),
+            )
+            Text(
+                text = status,
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.2.sp),
+                color = Color(0xFF7EE8C8),
+            )
+        }
+    }
+}
+
+@Composable
+private fun OfflineTrustBadge(text: String) {
+    Row(
+        modifier = Modifier
+            .background(Color(0x121A3559), RoundedCornerShape(999.dp))
+            .border(0.5.dp, BorderSubtle.copy(alpha = 0.6f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .background(Color(0xFF5ED5F6), CircleShape),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.3.sp),
+            color = TextSecondary,
+        )
     }
 }

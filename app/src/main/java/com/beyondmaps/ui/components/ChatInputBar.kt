@@ -69,8 +69,6 @@ fun ChatInputBar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     placeholder: String,
-    destination: String,
-    entryCount: String,
 ) {
     val InputBorderIdle = Color(0x12FFFFFF)
     val InputBorderActive = Color(0x38508CFF)
@@ -78,11 +76,13 @@ fun ChatInputBar(
     val SendGradientEnd = Color(0x8C14378C)
     val SendIconColor = Color(0xD985AFFF)
     val StopIconColor = Color(0xB2648FFF)
-    val ChipText = Color(0xFF2A3F5E)
-    val ChipBorder = Color(0x0FFFFFFF)
-    val ContextDot = Color(0xFF1A3260)
-    val ContextText = Color(0xFF1C2D46)
-    val EntryText = Color(0xFF1E3A5C)
+    val ChipText = Color(0xFF5C7CAD)
+    val ChipBorder = Color(0x3379B2FF)
+    val ChipBackground = Color(0x14253F67)
+    val ChipPressedBackground = Color(0x244981CF)
+    val ChipPressedText = Color(0xFF9DCDFF)
+    val ChipPressedBorder = Color(0x4D7BB7FF)
+    val ChipAccentDot = Color(0xFF78B5FF)
 
     val suggestions = listOf(
         "Where to eat late?",
@@ -97,16 +97,8 @@ fun ChatInputBar(
         modifier = modifier
             .fillMaxWidth()
             .border(0.5.dp, Color(0x0AFFFFFF))
-            .padding(top = 0.dp, start = 14.dp, end = 14.dp, bottom = 24.dp),
+            .padding(top = 8.dp, start = 14.dp, end = 14.dp, bottom = 24.dp),
     ) {
-        ContextLine(
-            destination = destination,
-            entryCount = entryCount,
-            contextDot = ContextDot,
-            contextText = ContextText,
-            entryText = EntryText,
-        )
-        Spacer(modifier = Modifier.size(8.dp))
         InputShell(
             value = value,
             onValueChange = onValueChange,
@@ -141,49 +133,14 @@ fun ChatInputBar(
                         onClick = { onValueChange(suggestion) },
                         chipText = ChipText,
                         chipBorder = ChipBorder,
+                        chipBackground = ChipBackground,
+                        chipPressedBackground = ChipPressedBackground,
+                        chipPressedText = ChipPressedText,
+                        chipPressedBorder = ChipPressedBorder,
+                        chipAccentDot = ChipAccentDot,
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ContextLine(
-    destination: String,
-    entryCount: String,
-    contextDot: Color,
-    contextText: Color,
-    entryText: Color,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(modifier = Modifier.size(4.dp).background(contextDot, CircleShape))
-        Spacer(modifier = Modifier.size(8.dp))
-        Text(
-            text = destination,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Light,
-            color = contextText,
-            letterSpacing = 0.3.sp,
-        )
-        Spacer(modifier = Modifier.weight(1f))
-        Box(
-            modifier = Modifier
-                .border(0.5.dp, Color(0x0FFFFFFF), RoundedCornerShape(20.dp))
-                .padding(vertical = 2.dp, horizontal = 8.dp),
-        ) {
-            Text(
-                text = entryCount,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Light,
-                color = entryText,
-                letterSpacing = 0.3.sp,
-            )
         }
     }
 }
@@ -400,42 +357,70 @@ private fun SuggestionChip(
     onClick: () -> Unit,
     chipText: Color,
     chipBorder: Color,
+    chipBackground: Color,
+    chipPressedBackground: Color,
+    chipPressedText: Color,
+    chipPressedBorder: Color,
+    chipAccentDot: Color,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = spring(
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+        ),
+        label = "chipScale",
+    )
     val bg by animateColorAsState(
-        targetValue = if (isPressed) Color(0x1A1E46A0) else Color(0x06FFFFFF),
+        targetValue = if (isPressed) chipPressedBackground else chipBackground,
         animationSpec = tween(180),
         label = "chipBg",
     )
     val border by animateColorAsState(
-        targetValue = if (isPressed) Color(0x1F508FFF) else chipBorder,
+        targetValue = if (isPressed) chipPressedBorder else chipBorder,
         animationSpec = tween(180),
         label = "chipBorder",
     )
     val textColor by animateColorAsState(
-        targetValue = if (isPressed) Color(0xFF4A70A0) else chipText,
+        targetValue = if (isPressed) chipPressedText else chipText,
         animationSpec = tween(180),
         label = "chipText",
     )
     Box(
         modifier = Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                alpha = if (isPressed) 0.96f else 1f
+            }
             .background(bg, RoundedCornerShape(20.dp))
-            .border(0.5.dp, border, RoundedCornerShape(20.dp))
+            .border(0.75.dp, border, RoundedCornerShape(20.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
             )
-            .padding(vertical = 6.dp, horizontal = 13.dp),
+            .padding(vertical = 7.dp, horizontal = 13.dp),
     ) {
-        Text(
-            text = text,
-            fontSize = 10.5.sp,
-            fontWeight = FontWeight.Light,
-            color = textColor,
-            letterSpacing = 0.1.sp,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(5.dp)
+                    .background(chipAccentDot, CircleShape),
+            )
+            Text(
+                text = text,
+                fontSize = 10.8.sp,
+                fontWeight = FontWeight.Normal,
+                color = textColor,
+                letterSpacing = 0.1.sp,
+            )
+        }
     }
 }
 
