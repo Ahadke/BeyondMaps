@@ -10,3 +10,4 @@ captures/
 .cxx/
 Reference/
 *.litertlm
+.venv311/
