@@ -1,6 +1,7 @@
 package com.beyondmaps.rag.vector
 
 import android.util.Log
+import java.util.Locale
 
 interface QueryEmbedder {
     val modelName: String
@@ -8,67 +9,90 @@ interface QueryEmbedder {
     suspend fun embed(text: String): FloatArray
 }
 
-class FakeQueryEmbedder(private val chunks: List<VectorChunk>) : QueryEmbedder {
+/**
+ * Lightweight on-device query embedder:
+ * builds a query vector as a weighted centroid of top lexical matches.
+ *
+ * This avoids hardcoded answer selection while a dedicated on-device query
+ * encoder is not yet bundled.
+ */
+class LightweightQueryEmbedder(private val chunks: List<VectorChunk>) : QueryEmbedder {
     override val modelName: String = "all-MiniLM-L6-v2"
     override val vectorSize: Int = 384
 
     init {
-        Log.d(TAG, "Using FakeQueryEmbedder. Replace with real embedding model later.")
+        Log.d(TAG, "Using LightweightQueryEmbedder (lexical-weighted centroid).")
     }
 
     override suspend fun embed(text: String): FloatArray {
-        val q = text.lowercase()
+        if (chunks.isEmpty()) return FloatArray(vectorSize)
 
-        val selectedFromKeyword = when {
-            q.contains("gelato") -> chunks.firstOrNull { it.containsInTitleOrText("gelato") }
-            q.contains("pizza") -> chunks.firstOrNull {
-                it.category.lowercase() == "restaurant" && it.containsInTitleOrText("pizza")
+        val queryTokens = tokenize(text)
+        if (queryTokens.isEmpty()) {
+            return globalCentroid()
+        }
+
+        data class Candidate(val chunk: VectorChunk, val score: Float)
+        val top = chunks.asSequence()
+            .filter { it.embedding.size == vectorSize }
+            .mapNotNull { chunk ->
+                val score = lexicalScore(queryTokens, chunk)
+                if (score <= 0f) null else Candidate(chunk, score)
             }
-            q.contains("duomo") -> chunks.firstOrNull {
-                it.category.lowercase() == "attraction" && it.containsInTitleOrText("duomo")
+            .sortedByDescending { it.score }
+            .take(12)
+            .toList()
+
+        if (top.isEmpty()) {
+            return globalCentroid()
+        }
+
+        val out = FloatArray(vectorSize)
+        var weightSum = 0f
+        for (candidate in top) {
+            val weight = candidate.score
+            weightSum += weight
+            val emb = candidate.chunk.embedding
+            for (i in 0 until vectorSize) {
+                out[i] += emb[i] * weight
             }
-            q.contains("ticket") || q.contains("affordable public transport") -> {
-                chunks.firstOrNull { it.category.lowercase() == "transit_guide" }
-                    ?: chunks.firstOrNull {
-                        it.category.lowercase() == "transit" &&
-                            (it.containsInTitleOrText("ticket") || it.containsInTitleOrText("price"))
-                    }
-            }
-            else -> null
         }
+        if (weightSum <= 0f) return globalCentroid()
+        for (i in 0 until vectorSize) out[i] /= weightSum
 
-        val category = when {
-            q.contains("gelato") || q.contains("eat") || q.contains("restaurant") || q.contains("food") -> "restaurant"
-            q.contains("tram") || q.contains("bus") || q.contains("train") || q.contains("stop") || q.contains("transit") -> "transit"
-            q.contains("duomo") || q.contains("see") || q.contains("visit") || q.contains("museum") || q.contains("attraction") -> "attraction"
-            q.contains("medicine") || q.contains("pharmacy") || q.contains("doctor") || q.contains("help") || q.contains("emergency") -> "phrase"
-            else -> "restaurant"
-        }
-
-        val selected = selectedFromKeyword
-            ?: chunks.firstOrNull { it.category.lowercase() == category }
-            ?: chunks.firstOrNull()
-
-        Log.d(
-            TAG,
-            "FakeQueryEmbedder selected chunk title=${selected?.title}, category=${selected?.category}, source=${selected?.source}",
-        )
-
-        if (selected == null) {
-            Log.e(TAG, "BUG: FakeQueryEmbedder could not select any chunk")
-            return FloatArray(vectorSize)
-        }
-        if (selected.embedding.isEmpty()) {
-            Log.e(TAG, "BUG: FakeQueryEmbedder selected empty embedding for chunk=${selected.title}")
-            return FloatArray(vectorSize)
-        }
-        return selected.embedding
+        Log.d(TAG, "LightweightQueryEmbedder query='${text.take(80)}' topMatches=${top.size}")
+        return out
     }
 
-    private fun VectorChunk.containsInTitleOrText(needle: String): Boolean {
-        val n = needle.lowercase()
-        return title.lowercase().contains(n) || text.lowercase().contains(n)
+    private fun lexicalScore(queryTokens: Set<String>, chunk: VectorChunk): Float {
+        val haystack = "${chunk.title} ${chunk.text} ${chunk.category}".lowercase(Locale.ROOT)
+        val matched = queryTokens.count { token -> haystack.contains(token) }
+        if (matched == 0) return 0f
+        val base = matched.toFloat() / queryTokens.size.toFloat()
+        val titleBoost = if (queryTokens.any { chunk.title.lowercase(Locale.ROOT).contains(it) }) 0.15f else 0f
+        return base + titleBoost
     }
+
+    private fun globalCentroid(): FloatArray {
+        val valid = chunks.filter { it.embedding.size == vectorSize }
+        if (valid.isEmpty()) return FloatArray(vectorSize)
+        val out = FloatArray(vectorSize)
+        for (chunk in valid) {
+            for (i in 0 until vectorSize) {
+                out[i] += chunk.embedding[i]
+            }
+        }
+        val count = valid.size.toFloat()
+        for (i in 0 until vectorSize) out[i] /= count
+        return out
+    }
+
+    private fun tokenize(text: String): Set<String> =
+        text.lowercase(Locale.ROOT)
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .map { it.trim() }
+            .filter { it.length >= 2 }
+            .toSet()
 
     companion object {
         private const val TAG = "BeyondMapsVectorRAG"

@@ -11,3 +11,8 @@ captures/
 Reference/
 *.litertlm
 .venv311/
+
+.venv*/
+.tmp/
+.hf-cache/
+artifacts/

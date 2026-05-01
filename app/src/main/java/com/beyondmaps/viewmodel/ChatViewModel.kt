@@ -7,7 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.beyondmaps.ai.BeyondMapsChatbot
 import com.beyondmaps.ai.OnDeviceOcr
-import com.beyondmaps.rag.vector.FakeQueryEmbedder
+import com.beyondmaps.rag.vector.LightweightQueryEmbedder
 import com.beyondmaps.rag.vector.QueryEmbedder
 import com.beyondmaps.rag.vector.VectorPackLoader
 import com.beyondmaps.rag.vector.VectorPromptBuilder
@@ -315,7 +315,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         withContext(Dispatchers.IO) {
             if (queryEmbedder != null && vectorRetriever != null) return@withContext
             val pack = vectorPackLoader.loadVectorPack()
-            queryEmbedder = FakeQueryEmbedder(pack.chunks)
+            queryEmbedder = LightweightQueryEmbedder(pack.chunks)
             vectorRetriever = VectorRetriever(pack)
             Log.d("BeyondMapsVectorRAG", "Vector RAG loaded chunks=${pack.chunks.size}, modelName=${pack.modelName}, vectorSize=${pack.vectorSize}")
         }
