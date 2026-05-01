@@ -29,6 +29,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Typography
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +40,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -57,6 +61,7 @@ private enum class AppScreen {
     Main,
     Home,
     Feature,
+    MenuScan,
 }
 
 private data class Feature(
@@ -65,6 +70,42 @@ private data class Feature(
     val description: String,
     val placeholder: String,
 )
+
+private val beyondMapsLightColorScheme = lightColorScheme(
+    primary = Color(0xFF2563EB),
+    secondary = Color(0xFF0F766E),
+    surface = Color.White,
+    background = Color.White,
+)
+
+/**
+ * Material3 default [Typography] uses downloadable / @font resources; on some devices that throws
+ * [Resources.NotFoundException]. Use platform sans-serif only and drop Android platform font hooks.
+ */
+private fun safeTypography(): Typography {
+    val d = Typography()
+    fun TextStyle.df() = copy(
+        fontFamily = FontFamily.SansSerif,
+        platformStyle = null,
+    )
+    return Typography(
+        displayLarge = d.displayLarge.df(),
+        displayMedium = d.displayMedium.df(),
+        displaySmall = d.displaySmall.df(),
+        headlineLarge = d.headlineLarge.df(),
+        headlineMedium = d.headlineMedium.df(),
+        headlineSmall = d.headlineSmall.df(),
+        titleLarge = d.titleLarge.df(),
+        titleMedium = d.titleMedium.df(),
+        titleSmall = d.titleSmall.df(),
+        bodyLarge = d.bodyLarge.df(),
+        bodyMedium = d.bodyMedium.df(),
+        bodySmall = d.bodySmall.df(),
+        labelLarge = d.labelLarge.df(),
+        labelMedium = d.labelMedium.df(),
+        labelSmall = d.labelSmall.df(),
+    )
+}
 
 private val features = listOf(
     Feature(
@@ -99,12 +140,8 @@ private fun BeyondMapsApp() {
     var selectedFeature by remember { mutableStateOf(features.first()) }
 
     MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme.copy(
-            primary = Color(0xFF2563EB),
-            secondary = Color(0xFF0F766E),
-            surface = Color.White,
-            background = Color.White,
-        ),
+        colorScheme = beyondMapsLightColorScheme,
+        typography = safeTypography(),
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -117,9 +154,13 @@ private fun BeyondMapsApp() {
                         selectedFeature = it
                         screen = AppScreen.Feature
                     },
+                    onMenuScanClick = { screen = AppScreen.MenuScan },
                 )
                 AppScreen.Feature -> FeatureScreen(
                     feature = selectedFeature,
+                    onBack = { screen = AppScreen.Home },
+                )
+                AppScreen.MenuScan -> MenuScanScreen(
                     onBack = { screen = AppScreen.Home },
                 )
             }
@@ -179,7 +220,7 @@ private fun MainScreen(onStartTrip: () -> Unit) {
 }
 
 @Composable
-private fun HomeScreen(onFeatureClick: (Feature) -> Unit) {
+private fun HomeScreen(onFeatureClick: (Feature) -> Unit, onMenuScanClick: () -> Unit) {
     ScreenContainer {
         Text(
             text = "Tokyo Offline Guide",
@@ -189,6 +230,20 @@ private fun HomeScreen(onFeatureClick: (Feature) -> Unit) {
         )
         Spacer(modifier = Modifier.height(14.dp))
         Badge(text = "Offline Ready")
+        Spacer(modifier = Modifier.height(18.dp))
+        Button(
+            onClick = onMenuScanClick,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            Text(
+                text = "Menu Scan",
+                modifier = Modifier.padding(vertical = 6.dp),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
         Spacer(modifier = Modifier.height(28.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -324,7 +379,7 @@ private fun Badge(text: String) {
 }
 
 @Composable
-private fun ScreenContainer(content: @Composable ColumnScope.() -> Unit) {
+fun ScreenContainer(content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -339,3 +394,4 @@ private fun ScreenContainer(content: @Composable ColumnScope.() -> Unit) {
 private fun BeyondMapsPreview() {
     BeyondMapsApp()
 }
+
