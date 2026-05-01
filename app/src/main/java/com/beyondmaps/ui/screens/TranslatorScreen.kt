@@ -11,13 +11,24 @@ import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -33,9 +44,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import com.beyondmaps.ai.BeyondMapsChatbot
+import com.beyondmaps.ui.components.AtmosphereBackground
+import com.beyondmaps.ui.theme.AccentBlue
+import com.beyondmaps.ui.theme.BorderSubtle
+import com.beyondmaps.ui.theme.TextDim
+import com.beyondmaps.ui.theme.TextPrimary
+import com.beyondmaps.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -224,113 +244,154 @@ fun TranslatorScreen() {
         speechRecognizer.startListening(intent)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text(
-            text = "Voice Translator",
-            style = MaterialTheme.typography.headlineMedium,
-        )
-
-        Text(
-            text = if (isEnglishToItalian) {
-                "🎤 Use keyboard mic and speak in English"
-            } else {
-                "🎤 Usa il microfono della tastiera e parla in italiano"
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray,
-        )
-
-        Card {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text("Input", style = MaterialTheme.typography.labelLarge)
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    label = { Text("Tap mic on keyboard or type") },
-                    placeholder = {
-                        Text(
-                            if (isEnglishToItalian) {
-                                "Speak in English..."
-                            } else {
-                                "Parla in italiano..."
-                            }
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                )
-            }
-        }
-
-        Button(
-            onClick = { startVoiceInput() },
-            modifier = Modifier.fillMaxWidth(),
+    Box(modifier = Modifier.fillMaxSize()) {
+        AtmosphereBackground()
+        Column(
+            modifier = Modifier
+                .zIndex(1f)
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(if (isListening) "Listening..." else "🎤 Speak")
-        }
-
-        if (isListening) {
             Text(
-                text = "🎙️ Listening...",
-                style = MaterialTheme.typography.bodyLarge,
+                text = "Voice Translator",
+                style = MaterialTheme.typography.headlineMedium,
+                color = TextPrimary,
             )
-            LinearProgressIndicator(
+
+            Text(
+                text = if (isEnglishToItalian) {
+                    "Use keyboard mic and speak in English"
+                } else {
+                    "Usa il microfono della tastiera e parla in italiano"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextDim,
+            )
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0x0CFFFFFF),
+                ),
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.border(0.6.dp, BorderSubtle, RoundedCornerShape(18.dp)),
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Input", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        label = { Text("Tap mic on keyboard or type") },
+                        placeholder = {
+                            Text(
+                                if (isEnglishToItalian) {
+                                    "Speak in English..."
+                                } else {
+                                    "Parla in italiano..."
+                                }
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                    )
+                }
+            }
+
+            Button(
+                onClick = { startVoiceInput() },
                 modifier = Modifier.fillMaxWidth(),
-            )
-        }
+                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+            ) {
+                Text(if (isListening) "Listening..." else "Speak")
+            }
 
-        Button(
-            onClick = {
-                val autoMode = detectEnglishToItalian(inputText)
-                detectedMode = autoMode
-                skipClearForAutoMode = true
-                isEnglishToItalian = autoMode
-                translateAndRender(
-                    sourceText = inputText,
-                    autoMode = autoMode,
-                    autoSpeak = false,
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isTranslating,
-        ) {
-            Text(if (isTranslating) "Translating..." else "Translate")
-        }
-
-        Card {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text("Translation", style = MaterialTheme.typography.labelLarge)
+            if (isListening) {
                 Text(
-                    text = outputText,
+                    text = "Listening...",
                     style = MaterialTheme.typography.bodyLarge,
+                    color = TextSecondary,
+                )
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = AccentBlue,
+                    trackColor = Color(0x1FFFFFFF),
                 )
             }
-        }
 
-        Button(
-            onClick = {
-                val textToSpeak = extractSpeakText(outputText, detectedMode)
-                tts?.language = if (detectedMode) {
-                    Locale.ITALIAN
-                } else {
-                    Locale.ENGLISH
+            Button(
+                onClick = {
+                    val autoMode = detectEnglishToItalian(inputText)
+                    detectedMode = autoMode
+                    skipClearForAutoMode = true
+                    isEnglishToItalian = autoMode
+                    translateAndRender(
+                        sourceText = inputText,
+                        autoMode = autoMode,
+                        autoSpeak = false,
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isTranslating,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0x1A72A4FF),
+                    disabledContainerColor = Color(0x0F72A4FF),
+                ),
+            ) {
+                Text(if (isTranslating) "Translating..." else "Translate", color = TextPrimary)
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0x0CFFFFFF),
+                ),
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .border(0.6.dp, BorderSubtle, RoundedCornerShape(18.dp)),
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Translation", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+                    Text(
+                        text = if (outputText.isBlank()) "Translation output appears here." else outputText,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextPrimary,
+                    )
                 }
-                tts?.speak(
-                    textToSpeak,
-                    TextToSpeech.QUEUE_FLUSH,
-                    null,
-                    "translation_output",
-                )
-            },
-            enabled = outputText.isNotBlank(),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("🔊 Speak")
+            }
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Button(
+                onClick = {
+                    val textToSpeak = extractSpeakText(outputText, detectedMode)
+                    tts?.language = if (detectedMode) {
+                        Locale.ITALIAN
+                    } else {
+                        Locale.ENGLISH
+                    }
+                    tts?.speak(
+                        textToSpeak,
+                        TextToSpeech.QUEUE_FLUSH,
+                        null,
+                        "translation_output",
+                    )
+                },
+                enabled = outputText.isNotBlank(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Color(0x244589FF), Color(0x284A7CFF)),
+                        ),
+                        RoundedCornerShape(14.dp),
+                    ),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+            ) {
+                Text("Speak Translation", color = TextPrimary)
+            }
         }
     }
 }

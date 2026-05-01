@@ -24,7 +24,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,8 +45,6 @@ import com.beyondmaps.R
 import com.beyondmaps.ui.components.AtmosphereBackground
 import com.beyondmaps.ui.components.FeatureCard
 import com.beyondmaps.ui.theme.AccentBlue
-import com.beyondmaps.ui.theme.AccentGold
-import com.beyondmaps.ui.theme.AccentGreen
 import com.beyondmaps.ui.theme.AccentPurple
 import com.beyondmaps.ui.theme.BorderSubtle
 import com.beyondmaps.ui.theme.TextDim
@@ -69,8 +66,6 @@ private data class HomeFeature(
 fun HomeScreen(navController: NavHostController) {
     val features = listOf(
         HomeFeature("Travel Guide", "Ask anything, get local answers", AccentBlue, "chat", R.drawable.ic_guide),
-        HomeFeature("Menu Scan", "Decode any menu, any language", AccentGreen, "menu_scan", R.drawable.ic_menu),
-        HomeFeature("Cultural Tips", "Customs and etiquette", AccentGold, "cultural_tips", R.drawable.ic_culture),
         HomeFeature("Phrases", "Say the right thing", AccentPurple, "phrases", R.drawable.ic_phrases),
     )
     val alphas = remember { List(features.size) { Animatable(0f) } }
@@ -122,35 +117,17 @@ fun HomeScreen(navController: NavHostController) {
             )
 
             Spacer(modifier = Modifier.height(22.dp))
-            for (i in features.indices step 2) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    val left = features[i]
-                    FeatureCard(
-                        label = left.label,
-                        description = left.description,
-                        accentColor = left.accent,
-                        icon = painterResource(left.iconRes),
-                        alpha = alphas[i].value,
-                        offsetYPx = offsets[i].value,
-                        modifier = Modifier.weight(1f),
-                        onClick = { navController.navigate(left.route) },
-                    )
-                    if (i + 1 < features.size) {
-                        val right = features[i + 1]
-                        FeatureCard(
-                            label = right.label,
-                            description = right.description,
-                            accentColor = right.accent,
-                            icon = painterResource(right.iconRes),
-                            alpha = alphas[i + 1].value,
-                            offsetYPx = offsets[i + 1].value,
-                            modifier = Modifier.weight(1f),
-                            onClick = { navController.navigate(right.route) },
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
+            features.forEachIndexed { index, feature ->
+                FeatureCard(
+                    label = feature.label,
+                    description = feature.description,
+                    accentColor = feature.accent,
+                    icon = painterResource(feature.iconRes),
+                    alpha = alphas[index].value,
+                    offsetYPx = offsets[index].value,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { navController.navigate(feature.route) },
+                )
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
@@ -158,12 +135,6 @@ fun HomeScreen(navController: NavHostController) {
             OfflineTrustBadge(
                 text = "On-device AI \u00b7 No connection required",
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = { navController.navigate("translator") },
-            ) {
-                Text("Translator")
-            }
         }
     }
 }

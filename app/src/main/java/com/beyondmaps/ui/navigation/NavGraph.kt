@@ -29,7 +29,6 @@ fun NavGraph(navController: NavHostController = rememberNavController()) {
         composable("chat") { ChatScreen(navController) }
         composable("menu_scan") { StubScreen(title = "Menu Scan", navController = navController) }
         composable("cultural_tips") { StubScreen(title = "Cultural Tips", navController = navController) }
-        composable("phrases") { StubScreen(title = "Phrases", navController = navController) }
-        composable("translator") { TranslatorScreen() }
+        composable("phrases") { TranslatorScreen() }
     }
 }
