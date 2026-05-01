@@ -130,7 +130,7 @@ class VectorPackLoader(private val context: Context) {
                         category = seed.category,
                         source = seed.source,
                         lat = seed.lat,
-                        lon = seed.lon,
+                        lon = seed.lon ?: seed.lng,
                         embedding = seed.embedding ?: FloatArray(0),
                     )
                 }
@@ -145,6 +145,16 @@ class VectorPackLoader(private val context: Context) {
             loadedChunks.take(3).forEachIndexed { index, chunk ->
                 Log.d(TAG, "loaded[$index] title=${chunk.title}, embeddingSize=${chunk.embedding.size}")
             }
+            loadedChunks
+                .asSequence()
+                .filter { it.lat != null && it.lon != null }
+                .take(10)
+                .forEachIndexed { index, chunk ->
+                    Log.d(
+                        TAG,
+                        "coords[$index] title=${chunk.title}, category=${chunk.category}, lat=${chunk.lat}, lon=${chunk.lon}",
+                    )
+                }
 
             val vectorSize = vectorSizeFromMeta ?: EXPECTED_VECTOR_SIZE
             val modelName = modelNameFromMeta ?: modelNameFromEmbeddings ?: ""
@@ -198,6 +208,7 @@ class VectorPackLoader(private val context: Context) {
         var source = ""
         var lat: Double? = null
         var lon: Double? = null
+        var lng: Double? = null
 
         reader.beginObject()
         while (reader.hasNext()) {
@@ -210,6 +221,7 @@ class VectorPackLoader(private val context: Context) {
                 "source" -> source = nextStringOrNull(reader).orEmpty()
                 "lat" -> lat = nextDoubleOrNull(reader)
                 "lon" -> lon = nextDoubleOrNull(reader)
+                "lng" -> lng = nextDoubleOrNull(reader)
                 else -> reader.skipValue()
             }
         }
@@ -224,6 +236,7 @@ class VectorPackLoader(private val context: Context) {
             source = source,
             lat = lat,
             lon = lon,
+            lng = lng,
         )
     }
 
@@ -293,6 +306,7 @@ class VectorPackLoader(private val context: Context) {
         val source: String,
         val lat: Double?,
         val lon: Double?,
+        val lng: Double?,
         var embedding: FloatArray? = null,
     )
 

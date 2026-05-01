@@ -10,6 +10,10 @@ import kotlin.math.sqrt
 data class VectorSearchResult(
     val chunk: VectorChunk,
     val vectorScore: Float,
+    val keywordScore: Float = 0f,
+    val exactMatchBoost: Float = 0f,
+    val landmarkBoost: Float = 0f,
+    val sourceBoost: Float = 0f,
     val finalScore: Float = vectorScore,
     val distanceKm: Double? = null,
 )
@@ -28,8 +32,10 @@ class VectorRetriever(private val pack: LoadedVectorPack) {
         if (topK <= 0) return emptyList()
 
         val intents = detectIntents(query)
+        val isBroadAttractionQuery = isBroadAttractionQuery(query)
         Log.d(TAG, "hybrid retrieve query=$query")
         Log.d(TAG, "hybrid retrieve intents=$intents")
+        Log.d(TAG, "hybrid retrieve broadAttraction=$isBroadAttractionQuery")
 
         val scored = pack.chunks.asSequence()
             .filter { it.embedding.size == EXPECTED_VECTOR_SIZE }
@@ -37,22 +43,33 @@ class VectorRetriever(private val pack: LoadedVectorPack) {
             .map { chunk ->
                 val vectorScore = cosineSimilarity(queryVector, chunk.embedding)
                 val categoryScore = categoryScore(intents, chunk)
+                val keywordScore = keywordScore(query, chunk)
                 val distanceKm = distanceKm(userLat, userLon, chunk.lat, chunk.lon)
                 val distanceScore = if (distanceKm != null) (1.0 / (1.0 + distanceKm)).toFloat() else 0f
                 val sourceScore = sourceScore(chunk.source)
-                val finalScore = if (userLat != null && userLon != null) {
-                    (0.45f * vectorScore) +
-                        (0.25f * categoryScore) +
-                        (0.20f * distanceScore) +
-                        (0.10f * sourceScore)
+                val exactMatchBoost = exactMatchBoost(query, chunk)
+                val landmarkBoost = landmarkBoost(chunk)
+                val sourceBoost = sourceBoost(chunk)
+                val genericOsmAttractionPenalty = genericOsmAttractionPenalty(chunk)
+                val broadAttractionAdjustment = if (isBroadAttractionQuery) {
+                    landmarkBoost + sourceBoost + genericOsmAttractionPenalty
                 } else {
-                    (0.65f * vectorScore) +
-                        (0.25f * categoryScore) +
-                        (0.10f * sourceScore)
+                    0f
                 }
+                val finalScore = (0.35f * vectorScore) +
+                    (0.25f * categoryScore) +
+                    (0.20f * keywordScore) +
+                    (0.10f * distanceScore) +
+                    (0.10f * sourceScore) +
+                    exactMatchBoost +
+                    broadAttractionAdjustment
                 VectorSearchResult(
                     chunk = chunk,
                     vectorScore = vectorScore,
+                    keywordScore = keywordScore,
+                    exactMatchBoost = exactMatchBoost,
+                    landmarkBoost = if (isBroadAttractionQuery) landmarkBoost else 0f,
+                    sourceBoost = if (isBroadAttractionQuery) (sourceBoost + genericOsmAttractionPenalty) else 0f,
                     finalScore = finalScore,
                     distanceKm = distanceKm,
                 )
@@ -69,6 +86,10 @@ class VectorRetriever(private val pack: LoadedVectorPack) {
                     VectorSearchResult(
                         chunk = chunk,
                         vectorScore = vectorScore,
+                        keywordScore = 0f,
+                        exactMatchBoost = 0f,
+                        landmarkBoost = 0f,
+                        sourceBoost = 0f,
                         finalScore = vectorScore,
                         distanceKm = distanceKm(userLat, userLon, chunk.lat, chunk.lon),
                     )
@@ -84,7 +105,7 @@ class VectorRetriever(private val pack: LoadedVectorPack) {
         top.take(6).forEachIndexed { index, result ->
             Log.d(
                 TAG,
-                "hybrid top[$index] title=${result.chunk.title}, category=${result.chunk.category}, source=${result.chunk.source}, vectorScore=${"%.4f".format(result.vectorScore)}, finalScore=${"%.4f".format(result.finalScore)}, distance=${formatDistance(result.distanceKm)}",
+                "hybrid top[$index] title=${result.chunk.title}, category=${result.chunk.category}, source=${result.chunk.source}, vectorScore=${"%.4f".format(result.vectorScore)}, keywordScore=${"%.4f".format(result.keywordScore)}, exactMatchBoost=${"%.4f".format(result.exactMatchBoost)}, landmarkBoost=${"%.4f".format(result.landmarkBoost)}, sourceBoost=${"%.4f".format(result.sourceBoost)}, finalScore=${"%.4f".format(result.finalScore)}, distanceKm=${formatDistance(result.distanceKm)}",
             )
         }
         return top
@@ -190,6 +211,55 @@ class VectorRetriever(private val pack: LoadedVectorPack) {
         else -> 0.5f
     }
 
+    private fun isBroadAttractionQuery(query: String): Boolean {
+        val q = query.lowercase(Locale.ROOT)
+        return BROAD_ATTRACTION_QUERY_PATTERNS.any { q.contains(it) }
+    }
+
+    private fun landmarkBoost(chunk: VectorChunk): Float {
+        val haystack = "${chunk.title} ${chunk.text}".lowercase(Locale.ROOT)
+        return if (KNOWN_FLORENCE_LANDMARKS.any { landmark -> haystack.contains(landmark.lowercase(Locale.ROOT)) }) 0.35f else 0f
+    }
+
+    private fun sourceBoost(chunk: VectorChunk): Float = when (chunk.source.lowercase(Locale.ROOT)) {
+        "wikivoyage" -> 0.25f
+        "florence_official" -> 0.20f
+        "wikidata" -> 0.15f
+        "openstreetmap", "osm" -> 0.0f
+        else -> 0f
+    }
+
+    private fun genericOsmAttractionPenalty(chunk: VectorChunk): Float {
+        val source = chunk.source.lowercase(Locale.ROOT)
+        val category = normalizeCategory(chunk.category)
+        if (source !in setOf("openstreetmap", "osm") || category != "attraction") return 0f
+        return if (landmarkBoost(chunk) > 0f) 0f else -0.25f
+    }
+
+    private fun keywordScore(query: String, chunk: VectorChunk): Float {
+        val queryTokens = tokenize(query)
+        if (queryTokens.isEmpty()) return 0f
+        val haystack = "${chunk.title} ${chunk.text} ${chunk.category}".lowercase(Locale.ROOT)
+        val matched = queryTokens.count { token -> haystack.contains(token) }
+        return matched.toFloat() / queryTokens.size.toFloat()
+    }
+
+    private fun exactMatchBoost(query: String, chunk: VectorChunk): Float {
+        val queryTokens = tokenize(query)
+        if (queryTokens.isEmpty()) return 0f
+        val importantTokensInQuery = queryTokens.intersect(EXACT_MATCH_TERMS)
+        if (importantTokensInQuery.isEmpty()) return 0f
+        val haystack = "${chunk.title} ${chunk.text}".lowercase(Locale.ROOT)
+        return if (importantTokensInQuery.any { token -> haystack.contains(token) }) 0.35f else 0f
+    }
+
+    private fun tokenize(text: String): List<String> =
+        text.lowercase(Locale.ROOT)
+            .split(Regex("[^a-z0-9]+"))
+            .map { it.trim() }
+            .filter { it.length >= 2 }
+            .distinct()
+
     private fun distanceKm(userLat: Double?, userLon: Double?, lat: Double?, lon: Double?): Double? {
         if (userLat == null || userLon == null || lat == null || lon == null) return null
         val dLat = Math.toRadians(lat - userLat)
@@ -240,6 +310,27 @@ class VectorRetriever(private val pack: LoadedVectorPack) {
         private val WATER_WORDS = setOf("water", "refill", "fountain")
         private val ACCOMMODATION_WORDS = setOf(
             "hotel", "hostel", "airbnb", "accommodation", "stay", "lodging", "guesthouse",
+        )
+        private val EXACT_MATCH_TERMS = setOf(
+            "gelato", "pizza", "pharmacy", "duomo", "tram", "ticket", "bus", "museum", "toilet", "atm", "water",
+        )
+        private val BROAD_ATTRACTION_QUERY_PATTERNS = setOf(
+            "best places to visit",
+            "what should i see",
+            "top attractions",
+        )
+        private val KNOWN_FLORENCE_LANDMARKS = setOf(
+            "Duomo",
+            "Uffizi",
+            "Ponte Vecchio",
+            "Palazzo Vecchio",
+            "Accademia",
+            "Boboli",
+            "Pitti",
+            "Santa Maria Novella",
+            "Piazza della Signoria",
+            "Santa Croce",
+            "Mercato Centrale",
         )
     }
 }

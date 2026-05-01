@@ -18,6 +18,25 @@ class FakeQueryEmbedder(private val chunks: List<VectorChunk>) : QueryEmbedder {
 
     override suspend fun embed(text: String): FloatArray {
         val q = text.lowercase()
+
+        val selectedFromKeyword = when {
+            q.contains("gelato") -> chunks.firstOrNull { it.containsInTitleOrText("gelato") }
+            q.contains("pizza") -> chunks.firstOrNull {
+                it.category.lowercase() == "restaurant" && it.containsInTitleOrText("pizza")
+            }
+            q.contains("duomo") -> chunks.firstOrNull {
+                it.category.lowercase() == "attraction" && it.containsInTitleOrText("duomo")
+            }
+            q.contains("ticket") || q.contains("affordable public transport") -> {
+                chunks.firstOrNull { it.category.lowercase() == "transit_guide" }
+                    ?: chunks.firstOrNull {
+                        it.category.lowercase() == "transit" &&
+                            (it.containsInTitleOrText("ticket") || it.containsInTitleOrText("price"))
+                    }
+            }
+            else -> null
+        }
+
         val category = when {
             q.contains("gelato") || q.contains("eat") || q.contains("restaurant") || q.contains("food") -> "restaurant"
             q.contains("tram") || q.contains("bus") || q.contains("train") || q.contains("stop") || q.contains("transit") -> "transit"
@@ -26,12 +45,13 @@ class FakeQueryEmbedder(private val chunks: List<VectorChunk>) : QueryEmbedder {
             else -> "restaurant"
         }
 
-        val selected = chunks.firstOrNull { it.category.lowercase() == category }
+        val selected = selectedFromKeyword
+            ?: chunks.firstOrNull { it.category.lowercase() == category }
             ?: chunks.firstOrNull()
 
         Log.d(
             TAG,
-            "FakeQueryEmbedder selected category=$category chunk=${selected?.title} chunkCategory=${selected?.category}",
+            "FakeQueryEmbedder selected chunk title=${selected?.title}, category=${selected?.category}, source=${selected?.source}",
         )
 
         if (selected == null) {
@@ -43,6 +63,11 @@ class FakeQueryEmbedder(private val chunks: List<VectorChunk>) : QueryEmbedder {
             return FloatArray(vectorSize)
         }
         return selected.embedding
+    }
+
+    private fun VectorChunk.containsInTitleOrText(needle: String): Boolean {
+        val n = needle.lowercase()
+        return title.lowercase().contains(n) || text.lowercase().contains(n)
     }
 
     companion object {
