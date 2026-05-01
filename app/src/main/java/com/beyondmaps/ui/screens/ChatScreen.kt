@@ -1,5 +1,11 @@
 package com.beyondmaps.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -35,12 +41,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.beyondmaps.ui.components.AiBubble
@@ -52,6 +64,7 @@ import com.beyondmaps.ui.theme.BorderSubtle
 import com.beyondmaps.ui.theme.TextPrimary
 import com.beyondmaps.viewmodel.ChatMessage
 import com.beyondmaps.viewmodel.ChatViewModel
+import java.io.File
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -59,10 +72,68 @@ fun ChatScreen(
     navController: NavHostController,
     viewModel: ChatViewModel = viewModel(),
 ) {
+    val context = LocalContext.current
     val messages by viewModel.messages.collectAsState()
     val isThinking by viewModel.isThinking.collectAsState()
     val input by viewModel.inputText.collectAsState()
+    val pendingImageUri by viewModel.pendingImageUri.collectAsState()
     val imeVisible = WindowInsets.isImeVisible
+
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+
+    val pickMediaLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri: Uri? ->
+        uri?.let { viewModel.setPendingImage(it) }
+    }
+
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { success ->
+        if (success && pendingCameraUri != null) {
+            viewModel.setPendingImage(pendingCameraUri!!)
+        }
+        pendingCameraUri = null
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            val photoFile = File(context.cacheDir, "camera_${System.currentTimeMillis()}.jpg")
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                photoFile,
+            )
+            pendingCameraUri = uri
+            takePictureLauncher.launch(uri)
+        }
+    }
+
+    fun launchCamera() {
+        when {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED -> {
+                val photoFile = File(context.cacheDir, "camera_${System.currentTimeMillis()}.jpg")
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    photoFile,
+                )
+                pendingCameraUri = uri
+                takePictureLauncher.launch(uri)
+            }
+
+            else -> cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    fun launchGallery() {
+        pickMediaLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+        )
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AtmosphereBackground()
@@ -89,6 +160,10 @@ fun ChatScreen(
                     onSend = { viewModel.sendMessage(input) },
                     onStop = { viewModel.onStop() },
                     placeholder = "Ask anything about Tokyo...",
+                    pendingImageUri = pendingImageUri,
+                    onClearImage = { viewModel.clearPendingImage() },
+                    onPickGallery = { launchGallery() },
+                    onOpenCamera = { launchCamera() },
                 )
             },
         ) { innerPadding ->
@@ -106,8 +181,8 @@ fun ChatScreen(
                             ) { it / 4 }
                         ) {
                             when (msg) {
-                                is ChatMessage.Ai -> AiBubble(msg.text, msg.sources)
-                                is ChatMessage.User -> UserBubble(msg.text)
+                                is ChatMessage.Ai -> AiBubble(msg.text, msg.sources, msg.isOcr)
+                                is ChatMessage.User -> UserBubble(msg.text, msg.hadImageAttachment)
                             }
                         }
                     }

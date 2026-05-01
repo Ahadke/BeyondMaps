@@ -240,6 +240,10 @@ class LiteRTLMManager private constructor(private val context: Context) {
         if (!isInitialized || engine == null) {
             throw IllegalStateException("Engine not initialized.")
         }
+        // Some LiteRT backends allow only one active session at a time.
+        // Always close an existing conversation before creating a new one.
+        conversation?.close()
+        conversation = null
 
         val conversationConfig = ConversationConfig(
             systemInstruction = if (systemPrompt != null) Contents.of(systemPrompt) else null

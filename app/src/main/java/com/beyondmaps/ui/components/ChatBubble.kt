@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,7 +34,7 @@ import com.beyondmaps.ui.theme.HighlightBlue
 import com.beyondmaps.ui.theme.TextSecondary
 
 @Composable
-fun AiBubble(text: String, sources: List<String>?) {
+fun AiBubble(text: String, sources: List<String>?, isOcr: Boolean = false) {
     val isError = text.contains("could not start the offline model", ignoreCase = true) ||
         text.contains("offline model is not ready", ignoreCase = true) ||
         text.contains("failed while generating", ignoreCase = true)
@@ -75,7 +76,14 @@ fun AiBubble(text: String, sources: List<String>?) {
                 Column {
                     Text(
                         text = parseHighlighted(text),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = if (isOcr) {
+                            MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                lineHeight = 20.sp,
+                            )
+                        } else {
+                            MaterialTheme.typography.bodyMedium
+                        },
                         color = if (isError) Color(0xFFA5C2E8) else TextSecondary,
                     )
                     if (isError) {
@@ -113,11 +121,19 @@ fun AiBubble(text: String, sources: List<String>?) {
 }
 
 @Composable
-fun UserBubble(text: String) {
-    Box(
-        contentAlignment = Alignment.CenterEnd,
+fun UserBubble(text: String, hadImageAttachment: Boolean = false) {
+    Row(
         modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (hadImageAttachment) {
+            Text(
+                text = "📷",
+                modifier = Modifier.padding(end = 6.dp),
+                fontSize = 14.sp,
+            )
+        }
         Box(
             modifier = Modifier
                 .background(

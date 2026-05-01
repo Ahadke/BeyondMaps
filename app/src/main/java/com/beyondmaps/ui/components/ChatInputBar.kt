@@ -1,5 +1,7 @@
 package com.beyondmaps.ui.components
 
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.RepeatMode
@@ -15,6 +17,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.updateTransition
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,17 +38,22 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -54,11 +62,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ChatInputBar(
@@ -69,6 +81,10 @@ fun ChatInputBar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     placeholder: String,
+    pendingImageUri: Uri? = null,
+    onClearImage: () -> Unit = {},
+    onPickGallery: () -> Unit = {},
+    onOpenCamera: () -> Unit = {},
 ) {
     val InputBorderIdle = Color(0x12FFFFFF)
     val InputBorderActive = Color(0x38508CFF)
@@ -99,6 +115,34 @@ fun ChatInputBar(
             .border(0.5.dp, Color(0x0AFFFFFF))
             .padding(top = 8.dp, start = 14.dp, end = 14.dp, bottom = 24.dp),
     ) {
+        if (pendingImageUri != null) {
+            PendingImagePreview(
+                uri = pendingImageUri,
+                onRemove = onClearImage,
+                enabled = !isThinking,
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(
+                onClick = onPickGallery,
+                enabled = !isThinking,
+            ) {
+                Text("Gallery", fontSize = 12.sp, color = Color(0xFF6E9BDC))
+            }
+            TextButton(
+                onClick = onOpenCamera,
+                enabled = !isThinking,
+            ) {
+                Text("Camera", fontSize = 12.sp, color = Color(0xFF6E9BDC))
+            }
+        }
         InputShell(
             value = value,
             onValueChange = onValueChange,
@@ -115,7 +159,7 @@ fun ChatInputBar(
             stopIconColor = StopIconColor,
         )
         AnimatedVisibility(
-            visible = value.isEmpty() && !isThinking,
+            visible = value.isEmpty() && !isThinking && pendingImageUri == null,
             enter = fadeIn(tween(220)) + expandVertically(tween(220)),
             exit = fadeOut(tween(160)) + shrinkVertically(tween(160)),
         ) {
@@ -141,6 +185,52 @@ fun ChatInputBar(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PendingImagePreview(
+    uri: Uri,
+    onRemove: () -> Unit,
+    enabled: Boolean,
+) {
+    val context = LocalContext.current
+    var bitmap by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(uri) {
+        bitmap = withContext(Dispatchers.IO) {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                BitmapFactory.decodeStream(input)?.asImageBitmap()
+            }
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap!!,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(10.dp)),
+                    contentScale = ContentScale.Crop,
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+            }
+            Text(
+                text = "Image attached",
+                fontSize = 11.sp,
+                color = Color(0xFF6E88AB),
+            )
+        }
+        TextButton(onClick = onRemove, enabled = enabled) {
+            Text("Remove", fontSize = 12.sp, color = Color(0xFF7AB0E8))
         }
     }
 }
