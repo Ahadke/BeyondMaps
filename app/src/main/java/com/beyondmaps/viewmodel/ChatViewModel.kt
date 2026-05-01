@@ -7,6 +7,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.beyondmaps.ai.BeyondMapsChatbot
 import com.beyondmaps.ai.OnDeviceOcr
+import com.beyondmaps.rag.vector.FakeQueryEmbedder
+import com.beyondmaps.rag.vector.QueryEmbedder
+import com.beyondmaps.rag.vector.VectorPackLoader
+import com.beyondmaps.rag.vector.VectorPromptBuilder
+import com.beyondmaps.rag.vector.VectorRetriever
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -43,8 +48,11 @@ enum class ImageUseCase {
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val chatbot = BeyondMapsChatbot(application.applicationContext)
     private val onDeviceOcr = OnDeviceOcr(application.applicationContext)
+    private val vectorPackLoader = VectorPackLoader(application.applicationContext)
     private val startupMutex = Mutex()
     private var startupTravelReady = false
+    private var queryEmbedder: QueryEmbedder? = null
+    private var vectorRetriever: VectorRetriever? = null
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(
         listOf(ChatMessage.Ai("Preparing your offline guide..."))
@@ -93,8 +101,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _pendingImageUri.value = null
     }
 
-    fun sendMessage(text: String) {
-        val prompt = text.trim()
+    fun sendMessage(userText: String) {
+        Log.d("BeyondMapsRAG", "USER RAW INPUT = $userText")
+        Log.d("BeyondMapsRAG", "USER RAW INPUT length = ${userText.length}")
+        val prompt = userText.trim()
         val imageUri = _pendingImageUri.value
         val imageUseCase = _pendingImageUseCase.value
         if (prompt.isBlank() && imageUri == null) return
@@ -122,6 +132,46 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         ?: "The offline model is not ready."
                     _messages.value = _messages.value + ChatMessage.Ai(err, isOcr = useImageFlow)
                     return@launch
+                }
+
+                val ragPrompt = if (!useImageFlow) {
+                    ensureVectorRagLoaded()
+
+                    val queryVector = queryEmbedder!!.embed(prompt)
+
+                    val results = vectorRetriever!!.retrieve(
+                        query = prompt,
+                        queryVector = queryVector,
+                        userLat = 43.7731,
+                        userLon = 11.2550,
+                        topK = 6
+                    )
+
+                    val builtPrompt = VectorPromptBuilder().buildPrompt(
+                        query = prompt,
+                        results = results
+                    )
+
+                    Log.d("BeyondMapsVectorRAG", "VECTOR RESULTS count=${results.size}")
+                    results.forEachIndexed { index, result ->
+                        Log.d(
+                            "BeyondMapsVectorRAG",
+                            "VECTOR RESULT[$index] title=${result.chunk.title}, category=${result.chunk.category}, source=${result.chunk.source}, finalScore=${result.finalScore}"
+                        )
+                    }
+
+                    Log.d("BeyondMapsVectorRAG", "RAG PROMPT length=${builtPrompt.length}")
+                    Log.d("BeyondMapsVectorRAG", "RAG PROMPT START =====")
+                    Log.d("BeyondMapsVectorRAG", builtPrompt)
+                    Log.d("BeyondMapsVectorRAG", "RAG PROMPT END =====")
+
+                    if (results.isNotEmpty() && !builtPrompt.contains(results.first().chunk.title)) {
+                        Log.e("BeyondMapsVectorRAG", "BUG: RAG prompt does not contain first retrieved result title")
+                    }
+
+                    builtPrompt
+                } else {
+                    null
                 }
 
                 val modelPrompt = if (useImageFlow) {
@@ -174,15 +224,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             return@launch
                         }
                     }
-                } else {
-                    prompt
-                }
+                } else ragPrompt!!
 
                 var response = ""
                 var assistantMessageAdded = false
                 withContext(Dispatchers.IO) {
-                    val stream = chatbot.sendMessage(modelPrompt)
-                    stream.collect { chunk ->
+                    val promptBeingSent = if (!useImageFlow) ragPrompt!! else modelPrompt
+
+                    if (!useImageFlow) {
+                        Log.d("BeyondMapsVectorRAG", "PROMPT BEING SENT TO LLM length=${promptBeingSent.length}")
+                        Log.d("BeyondMapsVectorRAG", "PROMPT BEING SENT contains Local context = ${promptBeingSent.contains("Local context:")}")
+                        Log.d("BeyondMapsVectorRAG", "PROMPT BEING SENT contains user raw only = ${promptBeingSent == userText}")
+
+                        if (promptBeingSent == userText) {
+                            Log.e("BeyondMapsVectorRAG", "BUG: raw userText is being sent to LLM instead of RAG prompt")
+                        }
+
+                        if (!promptBeingSent.contains("Local context:")) {
+                            Log.e("BeyondMapsVectorRAG", "BUG: prompt sent to LLM does not contain Local context")
+                        }
+                    } else {
+                        Log.w("BeyondMapsRAG", "OLD RAW LLM PATH USED")
+                    }
+
+                    chatbot.sendMessage(promptBeingSent).collect { token ->
+                        Log.d("BeyondMapsChatbot", "VECTOR_RAG_MODEL_CHUNK: $token")
+                        val chunk = token
                         if (chunk.isEmpty()) return@collect
                         response += chunk
                         withContext(Dispatchers.Main) {
@@ -233,6 +300,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 Log.e(TAG, "Chatbot startup failed: ${error?.message}", error)
                 false
             }
+        }
+    }
+
+    private suspend fun ensureVectorRagLoaded() {
+        if (queryEmbedder != null && vectorRetriever != null) return
+        withContext(Dispatchers.IO) {
+            if (queryEmbedder != null && vectorRetriever != null) return@withContext
+            val pack = vectorPackLoader.loadVectorPack()
+            queryEmbedder = FakeQueryEmbedder(pack.chunks)
+            vectorRetriever = VectorRetriever(pack)
+            Log.d("BeyondMapsVectorRAG", "Vector RAG loaded chunks=${pack.chunks.size}, modelName=${pack.modelName}, vectorSize=${pack.vectorSize}")
         }
     }
 
