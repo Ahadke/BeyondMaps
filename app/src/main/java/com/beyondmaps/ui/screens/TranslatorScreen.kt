@@ -60,10 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -71,6 +68,7 @@ import androidx.core.content.ContextCompat
 import com.beyondmaps.R
 import com.beyondmaps.ai.BeyondMapsChatbot
 import com.beyondmaps.ui.components.AtmosphereBackground
+import com.beyondmaps.ui.components.BeyondMapsBrandTitle
 import com.beyondmaps.ui.theme.AccentBlue
 import com.beyondmaps.ui.theme.AccentPurple
 import com.beyondmaps.ui.theme.BorderSubtle
@@ -302,14 +300,7 @@ fun TranslatorScreen() {
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = buildAnnotatedString {
-                    withStyle(SpanStyle(color = TextPrimary)) { append("Voice") }
-                    append(" ")
-                    withStyle(SpanStyle(color = AccentBlue)) { append("Translator") }
-                },
-                style = MaterialTheme.typography.displayLarge,
-            )
+            BeyondMapsBrandTitle(textStyle = MaterialTheme.typography.displayLarge)
 
             Text(
                 text = "Speak, translate, and communicate offline",
@@ -347,8 +338,8 @@ fun TranslatorScreen() {
                                     painter = painterResource(R.drawable.ic_mic),
                                     contentDescription = "Microphone",
                                     modifier = Modifier
-                                        .width(16.dp)
-                                        .height(16.dp),
+                                        .width(19.dp)
+                                        .height(19.dp),
                                 )
                             }
                         }
@@ -379,6 +370,8 @@ fun TranslatorScreen() {
                 }
             }
 
+            Spacer(modifier = Modifier.height(6.dp))
+
             ExposedDropdownMenuBox(
                 expanded = isToMenuExpanded,
                 onExpandedChange = { isToMenuExpanded = !isToMenuExpanded },
@@ -408,7 +401,9 @@ fun TranslatorScreen() {
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = isToMenuExpanded)
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color.Transparent,
                             unfocusedBorderColor = Color.Transparent,
@@ -532,8 +527,8 @@ fun TranslatorScreen() {
                                     painter = painterResource(R.drawable.ic_speaker),
                                     contentDescription = "Speak translation",
                                     modifier = Modifier
-                                        .width(16.dp)
-                                        .height(16.dp),
+                                        .width(19.dp)
+                                        .height(19.dp),
                                 )
                             }
                         }
