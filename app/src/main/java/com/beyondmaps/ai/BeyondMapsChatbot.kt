@@ -84,6 +84,15 @@ class BeyondMapsChatbot(private val context: Context) {
         return manager.sendMultimodalMessage(text = prompt, imagePath = imagePath, audioPath = null)
     }
 
+    /**
+     * Runs a visual-scene summary (non-OCR) for fusion with OCR text.
+     */
+    fun sendVisionSummary(userQuery: String, imagePath: String): Flow<String> {
+        manager.startConversation(systemPrompt = VISION_SYSTEM_PROMPT)
+        val prompt = buildVisionPrompt(userQuery)
+        return manager.sendMultimodalMessage(text = prompt, imagePath = imagePath, audioPath = null)
+    }
+
     fun close() {
         manager.cleanup()
         activeModelPath = null
@@ -107,6 +116,20 @@ class BeyondMapsChatbot(private val context: Context) {
         }
     }
 
+    private fun buildVisionPrompt(userQuery: String): String {
+        val q = userQuery.trim().ifBlank {
+            "Describe the scene and relevant visual context."
+        }
+        return buildString {
+            appendLine("Task: describe non-text visual context from the image.")
+            appendLine("Do not transcribe text unless it is essential context.")
+            appendLine("Focus on objects, layout, symbols, and likely situation.")
+            appendLine("Keep it concise and factual.")
+            appendLine()
+            appendLine("User request: $q")
+        }
+    }
+
     companion object {
         private const val TAG = "BeyondMapsChatbot"
         private const val SYSTEM_PROMPT =
@@ -114,5 +137,7 @@ class BeyondMapsChatbot(private val context: Context) {
 
         private const val OCR_SYSTEM_PROMPT =
             "You are a strict OCR transcription engine. Return only faithful text from the image. Do not infer, paraphrase, translate, or explain unless explicitly requested."
+        private const val VISION_SYSTEM_PROMPT =
+            "You are a vision assistant. Describe visual context accurately and briefly without hallucinating details."
     }
 }

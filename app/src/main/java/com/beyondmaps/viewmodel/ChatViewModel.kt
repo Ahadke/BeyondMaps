@@ -13,10 +13,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 
 sealed class ChatMessage {
     data class Ai(
@@ -107,13 +110,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val extracted = withContext(Dispatchers.IO) {
                         onDeviceOcr.extractText(imageUri!!)
                     }
-                    if (extracted.isBlank()) {
+                    val imagePath = withContext(Dispatchers.IO) { copyUriToImageFile(imageUri!!) }
+                    val visionSummary = if (imagePath != null) {
+                        withContext(Dispatchers.IO) { getFastVlmVisionSummary(prompt, imagePath) }
+                    } else {
+                        ""
+                    }
+                    if (extracted.isBlank() && visionSummary.isBlank()) {
                         _messages.value = _messages.value + ChatMessage.Ai(
-                            "I couldn't detect readable text in that image. Try a clearer photo or crop tighter."
+                            "I couldn't extract text or visual context from that image. Try a clearer photo."
                         )
                         return@launch
                     }
-                    buildGemmaPromptFromOcr(userPrompt = prompt, extractedText = extracted)
+                    // Switch back to Gemma for final reasoning after optional FastVLM pass.
+                    withContext(Dispatchers.IO) { chatbot.ensureTravelModel() }
+                    buildGemmaFusionPrompt(
+                        userPrompt = prompt,
+                        extractedText = extracted,
+                        visionSummary = visionSummary,
+                    )
                 } else {
                     prompt
                 }
@@ -190,21 +205,61 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun buildGemmaPromptFromOcr(userPrompt: String, extractedText: String): String {
+    private suspend fun getFastVlmVisionSummary(userPrompt: String, imagePath: String): String {
+        val fastVlmReady = chatbot.ensureFastVlmModel()
+        if (fastVlmReady.isFailure) {
+            Log.w(TAG, "FastVLM unavailable for fusion: ${fastVlmReady.exceptionOrNull()?.message}")
+            return ""
+        }
+        return runCatching {
+            val sb = StringBuilder()
+            chatbot.sendVisionSummary(userPrompt, imagePath).collect { chunk ->
+                if (chunk.isNotEmpty()) sb.append(chunk)
+            }
+            sb.toString().trim()
+        }.getOrElse { e ->
+            Log.w(TAG, "FastVLM vision summary failed", e)
+            ""
+        }
+    }
+
+    private fun buildGemmaFusionPrompt(
+        userPrompt: String,
+        extractedText: String,
+        visionSummary: String,
+    ): String {
         val request = userPrompt.ifBlank {
             "Translate the extracted text to English and explain what it means."
         }
         return buildString {
-            appendLine("The following text was extracted locally using OCR from an image.")
-            appendLine("Use only this extracted text. If information is missing, say so.")
-            appendLine("If the text is not English, translate it to English first.")
-            appendLine("Then explain the translated meaning clearly and briefly.")
-            appendLine("If the user asks a specific question, answer it using the translated text.")
+            appendLine("You are given OCR text and a visual summary from the same image.")
+            appendLine("Use both sources for the best answer.")
+            appendLine("Prioritize OCR for literal text content.")
+            appendLine("Use visual summary for scene context and non-text cues.")
+            appendLine("If OCR text is non-English, translate it to English before explaining.")
+            appendLine("If sources conflict, prefer OCR for exact wording and mention uncertainty.")
             appendLine()
             appendLine("User request: $request")
             appendLine()
-            appendLine("Extracted OCR text:")
-            appendLine(extractedText)
+            appendLine("OCR_TEXT:")
+            appendLine(if (extractedText.isBlank()) "[none]" else extractedText)
+            appendLine()
+            appendLine("VISION_SUMMARY:")
+            appendLine(if (visionSummary.isBlank()) "[none]" else visionSummary)
+        }
+    }
+
+    private suspend fun copyUriToImageFile(uri: Uri): String? = withContext(Dispatchers.IO) {
+        try {
+            val app = getApplication<Application>()
+            val dest = File(app.cacheDir, "vision_${System.currentTimeMillis()}.jpg")
+            app.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(dest).use { output -> input.copyTo(output) }
+            } ?: return@withContext null
+            dest.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "copyUriToImageFile failed", e)
+            null
         }
     }
 
