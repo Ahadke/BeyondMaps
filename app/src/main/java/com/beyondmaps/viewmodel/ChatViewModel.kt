@@ -181,7 +181,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 var response = ""
                 var assistantMessageAdded = false
                 withContext(Dispatchers.IO) {
-                    val stream = chatbot.sendMessage(modelPrompt)
+                    val stream = if (useImageFlow) {
+                        chatbot.sendMessage(modelPrompt)
+                    } else {
+                        chatbot.sendMessageWithRag(modelPrompt)
+                    }
                     stream.collect { chunk ->
                         if (chunk.isEmpty()) return@collect
                         response += chunk

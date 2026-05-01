@@ -2,19 +2,37 @@ package com.beyondmaps.ai
 
 import android.content.Context
 import android.util.Log
+import com.beyondmaps.rag.vector.FakeQueryEmbedder
+import com.beyondmaps.rag.vector.VectorPackLoader
+import com.beyondmaps.rag.vector.VectorPromptBuilder
+import com.beyondmaps.rag.vector.VectorRetriever
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 class BeyondMapsChatbot(private val context: Context) {
     private val manager = LiteRTLMManager.getInstance(context)
     private val resolver = ModelResolver(context)
     private val engineMutex = Mutex()
+    private val ragMutex = Mutex()
+    private val vectorPackLoader = VectorPackLoader(context)
+    private val vectorPromptBuilder = VectorPromptBuilder()
 
     /** Path of the model file last successfully loaded into [manager]. */
     private var activeModelPath: String? = null
+    private var ragRetriever: VectorRetriever? = null
+    private var ragEmbedder: FakeQueryEmbedder? = null
+    private var isRagReady: Boolean = false
 
-    suspend fun initialize(): Result<Boolean> = ensureTravelModel()
+    suspend fun initialize(): Result<Boolean> {
+        val modelReady = ensureTravelModel()
+        if (modelReady.isSuccess) {
+            warmupRag()
+        }
+        return modelReady
+    }
 
     /**
      * Ensures the travel/text model (e.g. Gemma as `model.litertlm`) is loaded.
@@ -72,6 +90,16 @@ class BeyondMapsChatbot(private val context: Context) {
         return manager.sendMessage(text)
     }
 
+    suspend fun sendMessageWithRag(userMessage: String): Flow<String> {
+        val ragPrompt = tryBuildRagPrompt(userMessage)
+        if (ragPrompt != null) {
+            Log.d(TAG, "Using RAG-augmented prompt for user request")
+            return manager.sendMessage(ragPrompt)
+        }
+        Log.w(TAG, "Falling back to plain prompt (RAG unavailable)")
+        return manager.sendMessage(userMessage)
+    }
+
     /**
      * Runs OCR-style extraction: image + user query, using FastVLM (caller must call [ensureFastVlmModel] first).
      */
@@ -96,6 +124,58 @@ class BeyondMapsChatbot(private val context: Context) {
     fun close() {
         manager.cleanup()
         activeModelPath = null
+        isRagReady = false
+        ragRetriever = null
+        ragEmbedder = null
+    }
+
+    private suspend fun warmupRag() {
+        if (isRagReady) return
+        ragMutex.withLock {
+            if (isRagReady) return@withLock
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val pack = vectorPackLoader.loadVectorPack()
+                    if (pack.chunks.isEmpty()) {
+                        Log.w(TAG, "RAG warmup loaded 0 chunks")
+                        return@runCatching
+                    }
+                    ragRetriever = VectorRetriever(pack)
+                    ragEmbedder = FakeQueryEmbedder(pack.chunks)
+                    isRagReady = true
+                    Log.i(
+                        TAG,
+                        "RAG warmup complete. chunks=${pack.chunks.size}, vectorSize=${pack.vectorSize}, model=${pack.modelName}",
+                    )
+                }.onFailure { error ->
+                    isRagReady = false
+                    ragRetriever = null
+                    ragEmbedder = null
+                    Log.e(TAG, "RAG warmup failed: ${error.message}", error)
+                }
+            }
+        }
+    }
+
+    private suspend fun tryBuildRagPrompt(userMessage: String): String? {
+        warmupRag()
+        if (!isRagReady) return null
+        val retriever = ragRetriever ?: return null
+        val embedder = ragEmbedder ?: return null
+
+        return runCatching {
+            val queryVector = embedder.embed(userMessage)
+            if (queryVector.size != embedder.vectorSize) {
+                Log.w(TAG, "RAG query embedding has invalid size=${queryVector.size}")
+                return null
+            }
+            val results = retriever.retrieve(query = userMessage, queryVector = queryVector, topK = RAG_TOP_K)
+            Log.d(TAG, "RAG retrieved=${results.size} chunks")
+            vectorPromptBuilder.buildPrompt(query = userMessage, results = results)
+        }.getOrElse { error ->
+            Log.e(TAG, "RAG prompt build failed: ${error.message}", error)
+            null
+        }
     }
 
     private fun buildOcrPrompt(userQuery: String): String {
@@ -132,6 +212,7 @@ class BeyondMapsChatbot(private val context: Context) {
 
     companion object {
         private const val TAG = "BeyondMapsChatbot"
+        private const val RAG_TOP_K = 5
         private const val SYSTEM_PROMPT =
             "You are BeyondMaps, an offline travel assistant. Reply clearly and briefly."
 

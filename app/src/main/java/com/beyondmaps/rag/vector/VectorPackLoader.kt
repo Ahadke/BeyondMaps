@@ -8,13 +8,22 @@ import java.io.File
 
 class VectorPackLoader(private val context: Context) {
     fun loadVectorPack(): LoadedVectorPack {
-        val file = File(context.getExternalFilesDir(null), "florence_pack.json")
-        Log.d(TAG, "Vector pack path: ${file.absolutePath}")
-        Log.d(TAG, "Vector pack exists: ${file.exists()}")
-        Log.d(TAG, "Vector pack canRead: ${file.canRead()}")
-        Log.d(TAG, "Vector pack file size: ${file.length()}")
+        val baseDir = context.getExternalFilesDir(null)
+        val packFile = File(baseDir, PACK_FILE_NAME)
+        val embeddingsFile = File(baseDir, EMBEDDINGS_FILE_NAME)
+        val legacyPackFile = File(baseDir, LEGACY_PACK_FILE_NAME)
+        val useLegacySingleFile = !packFile.exists() && !embeddingsFile.exists() && legacyPackFile.exists()
 
-        if (!file.exists() || !file.canRead()) {
+        Log.d(TAG, "Pack file path: ${packFile.absolutePath}")
+        Log.d(TAG, "Pack file exists: ${packFile.exists()} size=${packFile.length()}")
+        Log.d(TAG, "Embeddings file path: ${embeddingsFile.absolutePath}")
+        Log.d(TAG, "Embeddings file exists: ${embeddingsFile.exists()} size=${embeddingsFile.length()}")
+        if (useLegacySingleFile) {
+            Log.w(TAG, "Using legacy single-file vector pack: ${legacyPackFile.absolutePath}")
+        }
+
+        if (!useLegacySingleFile && (!packFile.exists() || !packFile.canRead() || !embeddingsFile.exists() || !embeddingsFile.canRead())) {
+            Log.w(TAG, "Split RAG files are unavailable/read-protected")
             return LoadedVectorPack(chunks = emptyList(), vectorSize = EXPECTED_VECTOR_SIZE, modelName = "")
         }
 
@@ -30,7 +39,8 @@ class VectorPackLoader(private val context: Context) {
             var chunksWithEmbeddings = 0
             var modelNameFromEmbeddings: String? = null
 
-            file.reader().use { fileReader ->
+            val chunkSourceFile = if (useLegacySingleFile) legacyPackFile else packFile
+            chunkSourceFile.reader().use { fileReader ->
                 JsonReader(fileReader).use { reader ->
                     reader.beginObject()
                     while (reader.hasNext()) {
@@ -57,6 +67,8 @@ class VectorPackLoader(private val context: Context) {
                                 }
                                 reader.endArray()
                             }
+                            "vectorSize" -> vectorSizeFromMeta = nextIntOrNull(reader)
+                            "modelName" -> modelNameFromMeta = nextStringOrNull(reader)
                             else -> reader.skipValue()
                         }
                     }
@@ -64,56 +76,61 @@ class VectorPackLoader(private val context: Context) {
                 }
             }
 
-            file.reader().use { fileReader ->
+            val embeddingSourceFile = if (useLegacySingleFile) legacyPackFile else embeddingsFile
+            embeddingSourceFile.reader().use { fileReader ->
                 JsonReader(fileReader).use { reader ->
                     reader.beginObject()
                     while (reader.hasNext()) {
-                        if (reader.nextName() != "embeddings") {
-                            reader.skipValue()
-                            continue
+                        when (reader.nextName()) {
+                            "modelName" -> {
+                                modelNameFromEmbeddings = nextStringOrNull(reader) ?: modelNameFromEmbeddings
+                            }
+                            "vectorSize" -> {
+                                vectorSizeFromMeta = nextIntOrNull(reader) ?: vectorSizeFromMeta
+                            }
+                            "embeddings" -> {
+                                reader.beginArray()
+                                while (reader.hasNext()) {
+                                    embeddingsCount++
+                                    val embedding = parseEmbedding(reader)
+                                    if (modelNameFromEmbeddings.isNullOrBlank() && !embedding.modelName.isNullOrBlank()) {
+                                        modelNameFromEmbeddings = embedding.modelName
+                                    }
+
+                                    if (embeddingsCount <= 3) {
+                                        Log.d(
+                                            TAG,
+                                            "embedding[${embeddingsCount - 1}] chunkId=${embedding.chunkId}, model=${embedding.modelName}, vectorSize=${embedding.vector.size}",
+                                        )
+                                    }
+
+                                    val chunkId = embedding.chunkId
+                                    if (chunkId.isBlank()) {
+                                        skippedMissingChunk++
+                                        continue
+                                    }
+
+                                    val seed = chunkSeedsById[chunkId]
+                                    if (seed == null) {
+                                        skippedMissingChunk++
+                                        continue
+                                    }
+
+                                    val parsed = embedding.vector
+                                    if (parsed.size != EXPECTED_VECTOR_SIZE) {
+                                        skippedBadVector++
+                                        continue
+                                    }
+
+                                    if (seed.embedding == null) {
+                                        chunksWithEmbeddings++
+                                    }
+                                    seed.embedding = parsed
+                                }
+                                reader.endArray()
+                            }
+                            else -> reader.skipValue()
                         }
-                        reader.beginArray()
-                        while (reader.hasNext()) {
-                            embeddingsCount++
-                            val embedding = parseEmbedding(reader)
-                            if (modelNameFromEmbeddings.isNullOrBlank() && !embedding.modelName.isNullOrBlank()) {
-                                modelNameFromEmbeddings = embedding.modelName
-                            }
-
-                            if (embeddingsCount <= 3) {
-                                Log.d(
-                                    TAG,
-                                    "embedding[${embeddingsCount - 1}] chunkId=${embedding.chunkId}, model=${embedding.modelName}, vectorStringLength=${embedding.vectorStringLength}",
-                                )
-                            }
-
-                            val chunkId = embedding.chunkId
-                            if (chunkId.isBlank()) {
-                                skippedMissingChunk++
-                                continue
-                            }
-
-                            val seed = chunkSeedsById[chunkId]
-                            if (seed == null) {
-                                skippedMissingChunk++
-                                continue
-                            }
-
-                            val parsed = parseVectorString(embedding.vectorString ?: "")
-                            if (embeddingsCount <= 3) {
-                                Log.d(TAG, "embedding[${embeddingsCount - 1}] parsedSize=${parsed.size}")
-                            }
-                            if (parsed.size != EXPECTED_VECTOR_SIZE) {
-                                skippedBadVector++
-                                continue
-                            }
-
-                            if (seed.embedding == null) {
-                                chunksWithEmbeddings++
-                            }
-                            seed.embedding = parsed
-                        }
-                        reader.endArray()
                     }
                     reader.endObject()
                 }
@@ -230,14 +247,14 @@ class VectorPackLoader(private val context: Context) {
     private fun parseEmbedding(reader: JsonReader): EmbeddingSeed {
         var chunkId: String? = null
         var modelName: String? = null
-        var vectorRaw: String? = null
+        var vector = FloatArray(0)
 
         reader.beginObject()
         while (reader.hasNext()) {
             when (reader.nextName()) {
                 "chunkId" -> chunkId = nextStringOrNull(reader)
                 "modelName" -> modelName = nextStringOrNull(reader)
-                "vector" -> vectorRaw = nextStringOrNull(reader)
+                "vector" -> vector = parseVector(reader)
                 else -> reader.skipValue()
             }
         }
@@ -246,8 +263,7 @@ class VectorPackLoader(private val context: Context) {
         return EmbeddingSeed(
             chunkId = chunkId.orEmpty().trim(),
             modelName = modelName,
-            vectorString = vectorRaw,
-            vectorStringLength = vectorRaw?.length ?: 0,
+            vector = vector,
         )
     }
 
@@ -267,6 +283,44 @@ class VectorPackLoader(private val context: Context) {
             reader.nextDouble()
         }
 
+    private fun nextIntOrNull(reader: JsonReader): Int? =
+        if (reader.peek() == JsonToken.NULL) {
+            reader.nextNull()
+            null
+        } else {
+            reader.nextInt()
+        }
+
+    private fun parseVector(reader: JsonReader): FloatArray {
+        return when (reader.peek()) {
+            JsonToken.NULL -> {
+                reader.nextNull()
+                FloatArray(0)
+            }
+            JsonToken.BEGIN_ARRAY -> {
+                val values = ArrayList<Float>(EXPECTED_VECTOR_SIZE)
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    values += when (reader.peek()) {
+                        JsonToken.NUMBER -> reader.nextDouble().toFloat()
+                        JsonToken.STRING -> reader.nextString().toFloatOrNull() ?: 0f
+                        else -> {
+                            reader.skipValue()
+                            0f
+                        }
+                    }
+                }
+                reader.endArray()
+                values.toFloatArray()
+            }
+            JsonToken.STRING -> parseVectorString(reader.nextString())
+            else -> {
+                reader.skipValue()
+                FloatArray(0)
+            }
+        }
+    }
+
     private fun parseVectorString(vectorStr: String): FloatArray {
         if (vectorStr.isBlank()) return FloatArray(0)
         return vectorStr
@@ -281,6 +335,9 @@ class VectorPackLoader(private val context: Context) {
     companion object {
         private const val TAG = "BeyondMapsVectorRAG"
         private const val EXPECTED_VECTOR_SIZE = 384
+        private const val PACK_FILE_NAME = "florence_pack_clean.json"
+        private const val EMBEDDINGS_FILE_NAME = "florence_embeddings_all-MiniLM-L6-v2.json"
+        private const val LEGACY_PACK_FILE_NAME = "florence_pack.json"
     }
 
     fun loadPack(): List<VectorChunk> = loadVectorPack().chunks
@@ -299,7 +356,6 @@ class VectorPackLoader(private val context: Context) {
     private data class EmbeddingSeed(
         val chunkId: String,
         val modelName: String?,
-        val vectorString: String?,
-        val vectorStringLength: Int,
+        val vector: FloatArray,
     )
 }
