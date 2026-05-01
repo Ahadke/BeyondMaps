@@ -186,7 +186,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                 )
                                 return@launch
                             }
-                            buildGemmaPromptFromOcr(userPrompt = prompt, extractedText = extracted)
+                            val prepared = prepareOcrForLlm(extracted)
+                            if (prepared.isBlank()) {
+                                _messages.value = _messages.value + ChatMessage.Ai(
+                                    "I detected text, but it was too noisy to translate reliably. Try a closer photo with less glare."
+                                )
+                                return@launch
+                            }
+                            buildGemmaPromptFromOcr(userPrompt = prompt, extractedText = prepared)
                         }
                         ImageUseCase.IDENTIFY -> {
                             val imagePath = withContext(Dispatchers.IO) { copyUriToImageFile(imageUri!!) }
@@ -330,20 +337,79 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun buildGemmaPromptFromOcr(userPrompt: String, extractedText: String): String {
         val request = userPrompt.ifBlank {
-            "Translate the extracted text to English and explain what it means."
+            "Translate this text to clear English for a traveler."
         }
         return buildString {
-            appendLine("The following text was extracted locally using OCR from an image.")
-            appendLine("Use only this extracted text. If information is missing, say so.")
-            appendLine("If the text is not English, translate it to English first.")
-            appendLine("Then explain the translated meaning clearly and briefly.")
-            appendLine("If the user asks a specific question, answer it using the translated text.")
+            appendLine("Use only OCR_TEXT. Do not invent missing text.")
+            appendLine("Keep response clear, practical, and easy to read on mobile.")
+            appendLine("Do not repeat duplicate multilingual lines; keep only the clearest source line.")
+            appendLine("If a line is uncertain, keep it and mark [OCR uncertain].")
+            appendLine("Prefer this structure when helpful:")
+            appendLine("- Translation lines as: Original text -> English meaning")
+            appendLine("- Then brief practical notes")
+            appendLine("Do not use awkward labels before arrows (for example: 'Practical ->').")
+            appendLine("Tone should be natural and conversational, not robotic.")
+            appendLine("A slightly longer response is okay when it improves clarity.")
+            appendLine("Keep practical notes to around 2-4 bullets.")
             appendLine()
             appendLine("User request: $request")
             appendLine()
             appendLine("OCR_TEXT:")
             appendLine(extractedText)
         }
+    }
+
+    private fun prepareOcrForLlm(raw: String): String {
+        val normalized = raw.lineSequence()
+            .map { it.replace('\u00A0', ' ') }
+            .map { it.replace(Regex("\\s+"), " ").trim() }
+            .map { it.replace('•', '-').replace('·', '-') }
+            .filter { it.isNotBlank() }
+            .toList()
+
+        if (normalized.isEmpty()) return ""
+
+        data class ScoredLine(val index: Int, val text: String, val score: Double)
+
+        val deduped = mutableListOf<ScoredLine>()
+        val seen = mutableSetOf<String>()
+        normalized.forEachIndexed { idx, line ->
+            val canonical = canonicalLine(line)
+            if (canonical.isBlank() || canonical in seen) return@forEachIndexed
+            seen += canonical
+            val score = lineQualityScore(line)
+            if (score < 0.2) return@forEachIndexed
+            val tagged = if (score < 0.55) "$line [OCR uncertain]" else line
+            deduped += ScoredLine(idx, tagged, score)
+        }
+
+        if (deduped.isEmpty()) return ""
+
+        val selected = deduped
+            .sortedByDescending { it.score }
+            .take(8)
+            .sortedBy { it.index }
+            .map { it.text }
+
+        return selected.joinToString("\n")
+    }
+
+    private fun canonicalLine(line: String): String {
+        // Keep prices in visible output, but ignore them for dedupe matching.
+        val noPrice = line.replace(Regex("[$€£¥]?\\s?\\d+[\\d.,]*"), " ")
+        return noPrice.lowercase()
+            .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun lineQualityScore(line: String): Double {
+        val compact = line.filterNot { it.isWhitespace() }
+        if (compact.isBlank()) return 0.0
+        val alnum = compact.count { it.isLetterOrDigit() }.toDouble()
+        val ratio = alnum / compact.length.toDouble()
+        val lengthFactor = (compact.length.coerceAtMost(40) / 40.0)
+        return (ratio * 0.8) + (lengthFactor * 0.2)
     }
 
     private suspend fun copyUriToImageFile(uri: Uri): String? = withContext(Dispatchers.IO) {
