@@ -7,7 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.beyondmaps.ai.BeyondMapsChatbot
 import com.beyondmaps.ai.OnDeviceOcr
-import com.beyondmaps.rag.vector.FakeQueryEmbedder
+import com.beyondmaps.data.rag.PackImportRepository
+import com.beyondmaps.rag.vector.LightweightQueryEmbedder
 import com.beyondmaps.rag.vector.QueryEmbedder
 import com.beyondmaps.rag.vector.VectorPackLoader
 import com.beyondmaps.rag.vector.VectorPromptBuilder
@@ -48,6 +49,7 @@ enum class ImageUseCase {
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val chatbot = BeyondMapsChatbot(application.applicationContext)
     private val onDeviceOcr = OnDeviceOcr(application.applicationContext)
+    private val packImportRepository = PackImportRepository(application.applicationContext)
     private val vectorPackLoader = VectorPackLoader(application.applicationContext)
     private val startupMutex = Mutex()
     private var startupTravelReady = false
@@ -74,7 +76,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             _isThinking.value = true
-            ensureLocalPackImported()
             val ready = ensureTravelAtStartup()
             _messages.value = if (ready) {
                 listOf(ChatMessage.Ai("Your offline guide is ready. Ask me anything."))
@@ -324,7 +325,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         withContext(Dispatchers.IO) {
             if (queryEmbedder != null && vectorRetriever != null) return@withContext
             val pack = vectorPackLoader.loadVectorPack()
-            queryEmbedder = FakeQueryEmbedder(pack.chunks)
+            queryEmbedder = LightweightQueryEmbedder(pack.chunks)
             vectorRetriever = VectorRetriever(pack)
             Log.d("BeyondMapsVectorRAG", "Vector RAG loaded chunks=${pack.chunks.size}, modelName=${pack.modelName}, vectorSize=${pack.vectorSize}")
         }
