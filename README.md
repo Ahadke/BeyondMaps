@@ -142,6 +142,17 @@ adb shell am start -n com.beyondmaps/.MainActivity
 ./gradlew :app:lintDebug
 ```
 
+## Download / Test the App
+
+To test BeyondMaps, download `beyondmaps.apk` from the GitHub release once available.
+
+## Team
+
+- Prasannadatta Kawadkar — ppkawadkar@ucdavis.edu
+- Aayusha Hadke — aayusha2611@gmail.com
+- Celine John Philip — celinejp.03@gmail.com
+- Bismanpal Singh — bismanpal@gmail.com
+
 ## License
 
 Add your license details here (e.g., MIT, Apache-2.0, or proprietary internal use).
