@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -59,6 +60,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -69,6 +71,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.beyondmaps.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -83,8 +86,8 @@ fun ChatInputBar(
     placeholder: String,
     pendingImageUri: Uri? = null,
     onClearImage: () -> Unit = {},
-    onPickGallery: () -> Unit = {},
-    onOpenCamera: () -> Unit = {},
+    onChooseTranslateText: () -> Unit = {},
+    onChooseIdentify: () -> Unit = {},
 ) {
     val InputBorderIdle = Color(0x12FFFFFF)
     val InputBorderActive = Color(0x38508CFF)
@@ -92,22 +95,9 @@ fun ChatInputBar(
     val SendGradientEnd = Color(0x8C14378C)
     val SendIconColor = Color(0xD985AFFF)
     val StopIconColor = Color(0xB2648FFF)
-    val ChipText = Color(0xFF5C7CAD)
-    val ChipBorder = Color(0x3379B2FF)
-    val ChipBackground = Color(0x14253F67)
-    val ChipPressedBackground = Color(0x244981CF)
-    val ChipPressedText = Color(0xFF9DCDFF)
-    val ChipPressedBorder = Color(0x4D7BB7FF)
-    val ChipAccentDot = Color(0xFF78B5FF)
-
-    val suggestions = listOf(
-        "Where to eat late?",
-        "Transit tips",
-        "What to avoid",
-        "Tipping customs",
-        "Pocket phrases",
-    )
     val soraFamily = MaterialTheme.typography.bodyMedium.fontFamily ?: FontFamily.Default
+
+    var attachExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -121,27 +111,6 @@ fun ChatInputBar(
                 onRemove = onClearImage,
                 enabled = !isThinking,
             )
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 6.dp)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(
-                onClick = onPickGallery,
-                enabled = !isThinking,
-            ) {
-                Text("Gallery", fontSize = 12.sp, color = Color(0xFF6E9BDC))
-            }
-            TextButton(
-                onClick = onOpenCamera,
-                enabled = !isThinking,
-            ) {
-                Text("Camera", fontSize = 12.sp, color = Color(0xFF6E9BDC))
-            }
         }
         InputShell(
             value = value,
@@ -157,33 +126,30 @@ fun ChatInputBar(
             sendGradientEnd = SendGradientEnd,
             sendIconColor = SendIconColor,
             stopIconColor = StopIconColor,
+            attachExpanded = attachExpanded,
+            onToggleAttach = { attachExpanded = !attachExpanded },
         )
         AnimatedVisibility(
-            visible = value.isEmpty() && !isThinking && pendingImageUri == null,
-            enter = fadeIn(tween(220)) + expandVertically(tween(220)),
-            exit = fadeOut(tween(160)) + shrinkVertically(tween(160)),
+            visible = attachExpanded && !isThinking,
+            enter = fadeIn(tween(180)) + expandVertically(tween(180)),
+            exit = fadeOut(tween(150)) + shrinkVertically(tween(150)),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp)
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Spacer(modifier = Modifier.size(4.dp))
-                suggestions.forEach { suggestion ->
-                    SuggestionChip(
-                        text = suggestion,
-                        onClick = { onValueChange(suggestion) },
-                        chipText = ChipText,
-                        chipBorder = ChipBorder,
-                        chipBackground = ChipBackground,
-                        chipPressedBackground = ChipPressedBackground,
-                        chipPressedText = ChipPressedText,
-                        chipPressedBorder = ChipPressedBorder,
-                        chipAccentDot = ChipAccentDot,
-                    )
-                }
+                ModeChip(label = "Translate text", onClick = {
+                    attachExpanded = false
+                    onChooseTranslateText()
+                })
+                ModeChip(label = "Identify", onClick = {
+                    attachExpanded = false
+                    onChooseIdentify()
+                })
             }
         }
     }
@@ -250,6 +216,8 @@ private fun InputShell(
     sendGradientEnd: Color,
     sendIconColor: Color,
     stopIconColor: Color,
+    attachExpanded: Boolean,
+    onToggleAttach: () -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
     var isFocused by remember { mutableStateOf(false) }
@@ -285,6 +253,12 @@ private fun InputShell(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        AttachPlusButton(
+            expanded = attachExpanded,
+            enabled = !isThinking,
+            onClick = onToggleAttach,
+        )
+
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -442,75 +416,63 @@ private fun SendButton(
 }
 
 @Composable
-private fun SuggestionChip(
-    text: String,
+private fun ModeChip(label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .background(
+                Brush.linearGradient(listOf(Color(0x2430547E), Color(0x1A22395C))),
+                RoundedCornerShape(18.dp)
+            )
+            .border(0.9.dp, Color(0x4A7AB8FF), RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val icon = if (label == "Translate text") R.drawable.ic_phrases else R.drawable.ic_guide
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = null,
+                tint = Color(0xFF98C7FF),
+                modifier = Modifier.size(12.dp)
+            )
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                color = Color(0xFFB2D7FF),
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AttachPlusButton(
+    expanded: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit,
-    chipText: Color,
-    chipBorder: Color,
-    chipBackground: Color,
-    chipPressedBackground: Color,
-    chipPressedText: Color,
-    chipPressedBorder: Color,
-    chipAccentDot: Color,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(
-            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-        ),
-        label = "chipScale",
-    )
-    val bg by animateColorAsState(
-        targetValue = if (isPressed) chipPressedBackground else chipBackground,
-        animationSpec = tween(180),
-        label = "chipBg",
-    )
-    val border by animateColorAsState(
-        targetValue = if (isPressed) chipPressedBorder else chipBorder,
-        animationSpec = tween(180),
-        label = "chipBorder",
-    )
-    val textColor by animateColorAsState(
-        targetValue = if (isPressed) chipPressedText else chipText,
-        animationSpec = tween(180),
-        label = "chipText",
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 45f else 0f,
+        animationSpec = tween(200),
+        label = "plusRotation",
     )
     Box(
         modifier = Modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                alpha = if (isPressed) 0.96f else 1f
-            }
-            .background(bg, RoundedCornerShape(20.dp))
-            .border(0.75.dp, border, RoundedCornerShape(20.dp))
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
+            .size(36.dp)
+            .background(
+                brush = Brush.linearGradient(listOf(Color(0xAA234A9A), Color(0x8A142C63))),
+                shape = CircleShape,
             )
-            .padding(vertical = 7.dp, horizontal = 13.dp),
+            .border(0.7.dp, Color(0x5088BEFF), CircleShape)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(5.dp)
-                    .background(chipAccentDot, CircleShape),
-            )
-            Text(
-                text = text,
-                fontSize = 10.8.sp,
-                fontWeight = FontWeight.Normal,
-                color = textColor,
-                letterSpacing = 0.1.sp,
-            )
-        }
+        Text(
+            text = "+",
+            color = Color(0xFFD7E8FF),
+            fontSize = 18.sp,
+            modifier = Modifier.graphicsLayer { rotationZ = rotation },
+        )
     }
 }
 

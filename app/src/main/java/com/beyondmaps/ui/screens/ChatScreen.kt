@@ -36,8 +36,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -64,6 +67,7 @@ import com.beyondmaps.ui.theme.BorderSubtle
 import com.beyondmaps.ui.theme.TextPrimary
 import com.beyondmaps.viewmodel.ChatMessage
 import com.beyondmaps.viewmodel.ChatViewModel
+import com.beyondmaps.viewmodel.ImageUseCase
 import java.io.File
 
 @Composable
@@ -77,21 +81,23 @@ fun ChatScreen(
     val isThinking by viewModel.isThinking.collectAsState()
     val input by viewModel.inputText.collectAsState()
     val pendingImageUri by viewModel.pendingImageUri.collectAsState()
+    val selectedUseCase by viewModel.pendingImageUseCase.collectAsState()
     val imeVisible = WindowInsets.isImeVisible
 
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingImageUseCase by remember { mutableStateOf<ImageUseCase?>(null) }
 
     val pickMediaLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri: Uri? ->
-        uri?.let { viewModel.setPendingImage(it) }
+        uri?.let { viewModel.setPendingImage(it, selectedUseCase) }
     }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture(),
     ) { success ->
         if (success && pendingCameraUri != null) {
-            viewModel.setPendingImage(pendingCameraUri!!)
+            viewModel.setPendingImage(pendingCameraUri!!, selectedUseCase)
         }
         pendingCameraUri = null
     }
@@ -135,6 +141,11 @@ fun ChatScreen(
         )
     }
 
+    fun chooseSource(useCase: ImageUseCase) {
+        pendingImageUseCase = useCase
+        viewModel.setPendingImageUseCase(useCase)
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         AtmosphereBackground()
         Scaffold(
@@ -162,8 +173,8 @@ fun ChatScreen(
                     placeholder = "Ask anything about Tokyo...",
                     pendingImageUri = pendingImageUri,
                     onClearImage = { viewModel.clearPendingImage() },
-                    onPickGallery = { launchGallery() },
-                    onOpenCamera = { launchCamera() },
+                    onChooseTranslateText = { chooseSource(ImageUseCase.TRANSLATE_TEXT) },
+                    onChooseIdentify = { chooseSource(ImageUseCase.IDENTIFY) },
                 )
             },
         ) { innerPadding ->
@@ -200,6 +211,40 @@ fun ChatScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
             )
         }
+    }
+    if (pendingImageUseCase != null) {
+        AlertDialog(
+            onDismissRequest = { pendingImageUseCase = null },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = Color(0xFF0E1625),
+            title = { Text("Choose image source", color = Color(0xFFD6E6FF)) },
+            text = {
+                Text(
+                    if (pendingImageUseCase == ImageUseCase.TRANSLATE_TEXT) {
+                        "Translate text mode selected"
+                    } else {
+                        "Identify mode selected"
+                    },
+                    color = Color(0xFF8CA5C9),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                    launchGallery()
+                    pendingImageUseCase = null
+                    }
+                ) { Text("Upload picture", color = Color(0xFF8FC0FF)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                    launchCamera()
+                    pendingImageUseCase = null
+                    }
+                ) { Text("Take picture", color = Color(0xFF8FC0FF)) }
+            },
+        )
     }
 }
 

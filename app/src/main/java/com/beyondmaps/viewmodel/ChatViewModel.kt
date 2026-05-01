@@ -34,6 +34,11 @@ sealed class ChatMessage {
     ) : ChatMessage()
 }
 
+enum class ImageUseCase {
+    TRANSLATE_TEXT,
+    IDENTIFY,
+}
+
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val chatbot = BeyondMapsChatbot(application.applicationContext)
     private val onDeviceOcr = OnDeviceOcr(application.applicationContext)
@@ -52,6 +57,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _pendingImageUri = MutableStateFlow<Uri?>(null)
     val pendingImageUri: StateFlow<Uri?> = _pendingImageUri.asStateFlow()
+    private val _pendingImageUseCase = MutableStateFlow(ImageUseCase.TRANSLATE_TEXT)
+    val pendingImageUseCase: StateFlow<ImageUseCase> = _pendingImageUseCase.asStateFlow()
 
     private var inferenceJob: Job? = null
 
@@ -72,8 +79,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setPendingImage(uri: Uri?) {
+    fun setPendingImage(uri: Uri?, useCase: ImageUseCase = _pendingImageUseCase.value) {
         _pendingImageUri.value = uri
+        _pendingImageUseCase.value = useCase
+    }
+
+    fun setPendingImageUseCase(useCase: ImageUseCase) {
+        _pendingImageUseCase.value = useCase
     }
 
     fun clearPendingImage() {
@@ -83,6 +95,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(text: String) {
         val prompt = text.trim()
         val imageUri = _pendingImageUri.value
+        val imageUseCase = _pendingImageUseCase.value
         if (prompt.isBlank() && imageUri == null) return
         if (_isThinking.value) return
 
@@ -107,28 +120,55 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 val modelPrompt = if (useImageFlow) {
-                    val extracted = withContext(Dispatchers.IO) {
-                        onDeviceOcr.extractText(imageUri!!)
+                    when (imageUseCase) {
+                        ImageUseCase.TRANSLATE_TEXT -> {
+                            val extracted = withContext(Dispatchers.IO) {
+                                onDeviceOcr.extractText(imageUri!!)
+                            }
+                            if (extracted.isBlank()) {
+                                _messages.value = _messages.value + ChatMessage.Ai(
+                                    "I couldn't detect readable text in that image. Try a clearer photo or crop tighter."
+                                )
+                                return@launch
+                            }
+                            buildGemmaPromptFromOcr(userPrompt = prompt, extractedText = extracted)
+                        }
+                        ImageUseCase.IDENTIFY -> {
+                            val imagePath = withContext(Dispatchers.IO) { copyUriToImageFile(imageUri!!) }
+                            if (imagePath == null) {
+                                _messages.value = _messages.value + ChatMessage.Ai(
+                                    "I couldn't process that image. Please try another one."
+                                )
+                                return@launch
+                            }
+                            val fastVlmReady = withContext(Dispatchers.IO) { chatbot.ensureFastVlmModel() }
+                            if (fastVlmReady.isFailure) {
+                                _messages.value = _messages.value + ChatMessage.Ai(
+                                    fastVlmReady.exceptionOrNull()?.message
+                                        ?: "FastVLM is not ready on this device."
+                                )
+                                return@launch
+                            }
+                            var response = ""
+                            var assistantMessageAdded = false
+                            withContext(Dispatchers.IO) {
+                                chatbot.sendVisionSummary(prompt, imagePath).collect { chunk ->
+                                    if (chunk.isEmpty()) return@collect
+                                    response += chunk
+                                    withContext(Dispatchers.Main) {
+                                        if (!assistantMessageAdded) {
+                                            _messages.value = _messages.value + ChatMessage.Ai(response, isOcr = true)
+                                            assistantMessageAdded = true
+                                        } else {
+                                            replaceLastAssistantMessage(response, true)
+                                        }
+                                    }
+                                }
+                            }
+                            _isThinking.value = false
+                            return@launch
+                        }
                     }
-                    val imagePath = withContext(Dispatchers.IO) { copyUriToImageFile(imageUri!!) }
-                    val visionSummary = if (imagePath != null) {
-                        withContext(Dispatchers.IO) { getFastVlmVisionSummary(prompt, imagePath) }
-                    } else {
-                        ""
-                    }
-                    if (extracted.isBlank() && visionSummary.isBlank()) {
-                        _messages.value = _messages.value + ChatMessage.Ai(
-                            "I couldn't extract text or visual context from that image. Try a clearer photo."
-                        )
-                        return@launch
-                    }
-                    // Switch back to Gemma for final reasoning after optional FastVLM pass.
-                    withContext(Dispatchers.IO) { chatbot.ensureTravelModel() }
-                    buildGemmaFusionPrompt(
-                        userPrompt = prompt,
-                        extractedText = extracted,
-                        visionSummary = visionSummary,
-                    )
                 } else {
                     prompt
                 }
@@ -205,47 +245,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun getFastVlmVisionSummary(userPrompt: String, imagePath: String): String {
-        val fastVlmReady = chatbot.ensureFastVlmModel()
-        if (fastVlmReady.isFailure) {
-            Log.w(TAG, "FastVLM unavailable for fusion: ${fastVlmReady.exceptionOrNull()?.message}")
-            return ""
-        }
-        return runCatching {
-            val sb = StringBuilder()
-            chatbot.sendVisionSummary(userPrompt, imagePath).collect { chunk ->
-                if (chunk.isNotEmpty()) sb.append(chunk)
-            }
-            sb.toString().trim()
-        }.getOrElse { e ->
-            Log.w(TAG, "FastVLM vision summary failed", e)
-            ""
-        }
-    }
-
-    private fun buildGemmaFusionPrompt(
-        userPrompt: String,
-        extractedText: String,
-        visionSummary: String,
-    ): String {
+    private fun buildGemmaPromptFromOcr(userPrompt: String, extractedText: String): String {
         val request = userPrompt.ifBlank {
             "Translate the extracted text to English and explain what it means."
         }
         return buildString {
-            appendLine("You are given OCR text and a visual summary from the same image.")
-            appendLine("Use both sources for the best answer.")
-            appendLine("Prioritize OCR for literal text content.")
-            appendLine("Use visual summary for scene context and non-text cues.")
-            appendLine("If OCR text is non-English, translate it to English before explaining.")
-            appendLine("If sources conflict, prefer OCR for exact wording and mention uncertainty.")
+            appendLine("The following text was extracted locally using OCR from an image.")
+            appendLine("Use only this extracted text. If information is missing, say so.")
+            appendLine("If the text is not English, translate it to English first.")
+            appendLine("Then explain the translated meaning clearly and briefly.")
+            appendLine("If the user asks a specific question, answer it using the translated text.")
             appendLine()
             appendLine("User request: $request")
             appendLine()
             appendLine("OCR_TEXT:")
-            appendLine(if (extractedText.isBlank()) "[none]" else extractedText)
-            appendLine()
-            appendLine("VISION_SUMMARY:")
-            appendLine(if (visionSummary.isBlank()) "[none]" else visionSummary)
+            appendLine(extractedText)
         }
     }
 
