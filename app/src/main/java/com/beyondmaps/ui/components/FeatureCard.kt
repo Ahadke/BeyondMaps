@@ -132,7 +132,7 @@ fun FeatureCard(
             Spacer(modifier = Modifier.height(11.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.5.sp),
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
                 color = TextPrimary,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -141,7 +141,7 @@ fun FeatureCard(
             Spacer(modifier = Modifier.height(5.dp))
             Text(
                 text = description,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
                 color = TextSecondary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,

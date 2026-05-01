@@ -60,6 +60,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.beyondmaps.ui.components.AiBubble
 import com.beyondmaps.ui.components.AtmosphereBackground
+import com.beyondmaps.ui.components.BeyondMapsBrandTitle
 import com.beyondmaps.ui.components.ChatInputBar
 import com.beyondmaps.ui.components.TypingIndicator
 import com.beyondmaps.ui.components.UserBubble
@@ -170,7 +171,7 @@ fun ChatScreen(
                     isThinking = isThinking,
                     onSend = { viewModel.sendMessage(input) },
                     onStop = { viewModel.onStop() },
-                    placeholder = "Ask anything about Tokyo...",
+                    placeholder = "Ask anything about Florence...",
                     pendingImageUri = pendingImageUri,
                     onClearImage = { viewModel.clearPendingImage() },
                     onChooseTranslateText = { chooseSource(ImageUseCase.TRANSLATE_TEXT) },
@@ -260,10 +261,14 @@ private fun ChatTopBar(onBack: () -> Unit) {
     ) {
         AnimatedAssistantAvatar(modifier = Modifier.noRippleClickable(onBack))
         androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(10.dp))
-        Column {
-            Text(text = "BeyondMaps", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            BeyondMapsBrandTitle(
+                textStyle = MaterialTheme.typography.titleMedium,
+                logoSize = 20.dp,
+                spacing = 5.dp,
+            )
             Text(
-                text = "Tokyo, Japan",
+                text = "Florence, Italy",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0xFF5D7398),
             )

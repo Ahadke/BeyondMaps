@@ -7,7 +7,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.beyondmaps.ai.BeyondMapsChatbot
 import com.beyondmaps.ai.OnDeviceOcr
-import com.beyondmaps.data.rag.PackImportRepository
+import com.beyondmaps.rag.vector.FakeQueryEmbedder
+import com.beyondmaps.rag.vector.QueryEmbedder
+import com.beyondmaps.rag.vector.VectorPackLoader
+import com.beyondmaps.rag.vector.VectorPromptBuilder
+import com.beyondmaps.rag.vector.VectorRetriever
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,9 +48,11 @@ enum class ImageUseCase {
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val chatbot = BeyondMapsChatbot(application.applicationContext)
     private val onDeviceOcr = OnDeviceOcr(application.applicationContext)
-    private val packImportRepository = PackImportRepository(application.applicationContext)
+    private val vectorPackLoader = VectorPackLoader(application.applicationContext)
     private val startupMutex = Mutex()
     private var startupTravelReady = false
+    private var queryEmbedder: QueryEmbedder? = null
+    private var vectorRetriever: VectorRetriever? = null
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(
         listOf(ChatMessage.Ai("Preparing your offline guide..."))
@@ -104,8 +110,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _pendingImageUri.value = null
     }
 
-    fun sendMessage(text: String) {
-        val prompt = text.trim()
+    fun sendMessage(userText: String) {
+        Log.d("BeyondMapsRAG", "USER RAW INPUT = $userText")
+        Log.d("BeyondMapsRAG", "USER RAW INPUT length = ${userText.length}")
+        val prompt = userText.trim()
         val imageUri = _pendingImageUri.value
         val imageUseCase = _pendingImageUseCase.value
         if (prompt.isBlank() && imageUri == null) return
@@ -135,6 +143,46 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
+                val ragPrompt = if (!useImageFlow) {
+                    ensureVectorRagLoaded()
+
+                    val queryVector = queryEmbedder!!.embed(prompt)
+
+                    val results = vectorRetriever!!.retrieve(
+                        query = prompt,
+                        queryVector = queryVector,
+                        userLat = 43.7731,
+                        userLon = 11.2550,
+                        topK = 6
+                    )
+
+                    val builtPrompt = VectorPromptBuilder().buildPrompt(
+                        query = prompt,
+                        results = results
+                    )
+
+                    Log.d("BeyondMapsVectorRAG", "VECTOR RESULTS count=${results.size}")
+                    results.forEachIndexed { index, result ->
+                        Log.d(
+                            "BeyondMapsVectorRAG",
+                            "VECTOR RESULT[$index] title=${result.chunk.title}, category=${result.chunk.category}, source=${result.chunk.source}, finalScore=${result.finalScore}"
+                        )
+                    }
+
+                    Log.d("BeyondMapsVectorRAG", "RAG PROMPT length=${builtPrompt.length}")
+                    Log.d("BeyondMapsVectorRAG", "RAG PROMPT START =====")
+                    Log.d("BeyondMapsVectorRAG", builtPrompt)
+                    Log.d("BeyondMapsVectorRAG", "RAG PROMPT END =====")
+
+                    if (results.isNotEmpty() && !builtPrompt.contains(results.first().chunk.title)) {
+                        Log.e("BeyondMapsVectorRAG", "BUG: RAG prompt does not contain first retrieved result title")
+                    }
+
+                    builtPrompt
+                } else {
+                    null
+                }
+
                 val modelPrompt = if (useImageFlow) {
                     when (imageUseCase) {
                         ImageUseCase.TRANSLATE_TEXT -> {
@@ -147,7 +195,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                 )
                                 return@launch
                             }
-                            buildGemmaPromptFromOcr(userPrompt = prompt, extractedText = extracted)
+                            val prepared = prepareOcrForLlm(extracted)
+                            if (prepared.isBlank()) {
+                                _messages.value = _messages.value + ChatMessage.Ai(
+                                    "I detected text, but it was too noisy to translate reliably. Try a closer photo with less glare."
+                                )
+                                return@launch
+                            }
+                            buildGemmaPromptFromOcr(userPrompt = prompt, extractedText = prepared)
                         }
                         ImageUseCase.IDENTIFY -> {
                             val imagePath = withContext(Dispatchers.IO) { copyUriToImageFile(imageUri!!) }
@@ -185,15 +240,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             return@launch
                         }
                     }
-                } else {
-                    prompt
-                }
+                } else ragPrompt!!
 
                 var response = ""
                 var assistantMessageAdded = false
                 withContext(Dispatchers.IO) {
-                    val stream = chatbot.sendMessage(modelPrompt)
-                    stream.collect { chunk ->
+                    val promptBeingSent = if (!useImageFlow) ragPrompt!! else modelPrompt
+
+                    if (!useImageFlow) {
+                        Log.d("BeyondMapsVectorRAG", "PROMPT BEING SENT TO LLM length=${promptBeingSent.length}")
+                        Log.d("BeyondMapsVectorRAG", "PROMPT BEING SENT contains Local context = ${promptBeingSent.contains("Local context:")}")
+                        Log.d("BeyondMapsVectorRAG", "PROMPT BEING SENT contains user raw only = ${promptBeingSent == userText}")
+
+                        if (promptBeingSent == userText) {
+                            Log.e("BeyondMapsVectorRAG", "BUG: raw userText is being sent to LLM instead of RAG prompt")
+                        }
+
+                        if (!promptBeingSent.contains("Local context:")) {
+                            Log.e("BeyondMapsVectorRAG", "BUG: prompt sent to LLM does not contain Local context")
+                        }
+                    } else {
+                        Log.w("BeyondMapsRAG", "OLD RAW LLM PATH USED")
+                    }
+
+                    chatbot.sendMessage(promptBeingSent).collect { token ->
+                        Log.d("BeyondMapsChatbot", "VECTOR_RAG_MODEL_CHUNK: $token")
+                        val chunk = token
                         if (chunk.isEmpty()) return@collect
                         response += chunk
                         withContext(Dispatchers.Main) {
@@ -247,6 +319,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private suspend fun ensureVectorRagLoaded() {
+        if (queryEmbedder != null && vectorRetriever != null) return
+        withContext(Dispatchers.IO) {
+            if (queryEmbedder != null && vectorRetriever != null) return@withContext
+            val pack = vectorPackLoader.loadVectorPack()
+            queryEmbedder = FakeQueryEmbedder(pack.chunks)
+            vectorRetriever = VectorRetriever(pack)
+            Log.d("BeyondMapsVectorRAG", "Vector RAG loaded chunks=${pack.chunks.size}, modelName=${pack.modelName}, vectorSize=${pack.vectorSize}")
+        }
+    }
+
     private fun replaceLastAssistantMessage(text: String, isOcr: Boolean) {
         val currentMessages = _messages.value.toMutableList()
         val lastAssistantIndex = currentMessages.indexOfLast { it is ChatMessage.Ai }
@@ -263,20 +346,79 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun buildGemmaPromptFromOcr(userPrompt: String, extractedText: String): String {
         val request = userPrompt.ifBlank {
-            "Translate the extracted text to English and explain what it means."
+            "Translate this text to clear English for a traveler."
         }
         return buildString {
-            appendLine("The following text was extracted locally using OCR from an image.")
-            appendLine("Use only this extracted text. If information is missing, say so.")
-            appendLine("If the text is not English, translate it to English first.")
-            appendLine("Then explain the translated meaning clearly and briefly.")
-            appendLine("If the user asks a specific question, answer it using the translated text.")
+            appendLine("Use only OCR_TEXT. Do not invent missing text.")
+            appendLine("Keep response clear, practical, and easy to read on mobile.")
+            appendLine("Do not repeat duplicate multilingual lines; keep only the clearest source line.")
+            appendLine("If a line is uncertain, keep it and mark [OCR uncertain].")
+            appendLine("Prefer this structure when helpful:")
+            appendLine("- Translation lines as: Original text -> English meaning")
+            appendLine("- Then brief practical notes")
+            appendLine("Do not use awkward labels before arrows (for example: 'Practical ->').")
+            appendLine("Tone should be natural and conversational, not robotic.")
+            appendLine("A slightly longer response is okay when it improves clarity.")
+            appendLine("Keep practical notes to around 2-4 bullets.")
             appendLine()
             appendLine("User request: $request")
             appendLine()
             appendLine("OCR_TEXT:")
             appendLine(extractedText)
         }
+    }
+
+    private fun prepareOcrForLlm(raw: String): String {
+        val normalized = raw.lineSequence()
+            .map { it.replace('\u00A0', ' ') }
+            .map { it.replace(Regex("\\s+"), " ").trim() }
+            .map { it.replace('•', '-').replace('·', '-') }
+            .filter { it.isNotBlank() }
+            .toList()
+
+        if (normalized.isEmpty()) return ""
+
+        data class ScoredLine(val index: Int, val text: String, val score: Double)
+
+        val deduped = mutableListOf<ScoredLine>()
+        val seen = mutableSetOf<String>()
+        normalized.forEachIndexed { idx, line ->
+            val canonical = canonicalLine(line)
+            if (canonical.isBlank() || canonical in seen) return@forEachIndexed
+            seen += canonical
+            val score = lineQualityScore(line)
+            if (score < 0.2) return@forEachIndexed
+            val tagged = if (score < 0.55) "$line [OCR uncertain]" else line
+            deduped += ScoredLine(idx, tagged, score)
+        }
+
+        if (deduped.isEmpty()) return ""
+
+        val selected = deduped
+            .sortedByDescending { it.score }
+            .take(8)
+            .sortedBy { it.index }
+            .map { it.text }
+
+        return selected.joinToString("\n")
+    }
+
+    private fun canonicalLine(line: String): String {
+        // Keep prices in visible output, but ignore them for dedupe matching.
+        val noPrice = line.replace(Regex("[$€£¥]?\\s?\\d+[\\d.,]*"), " ")
+        return noPrice.lowercase()
+            .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun lineQualityScore(line: String): Double {
+        val compact = line.filterNot { it.isWhitespace() }
+        if (compact.isBlank()) return 0.0
+        val alnum = compact.count { it.isLetterOrDigit() }.toDouble()
+        val ratio = alnum / compact.length.toDouble()
+        val lengthFactor = (compact.length.coerceAtMost(40) / 40.0)
+        return (ratio * 0.8) + (lengthFactor * 0.2)
     }
 
     private suspend fun copyUriToImageFile(uri: Uri): String? = withContext(Dispatchers.IO) {

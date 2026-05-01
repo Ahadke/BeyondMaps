@@ -24,3 +24,4 @@ florence_pack_fixed.json
 .cache/
 .tmp/
 florence_pack_fixed.json
+.venv311/

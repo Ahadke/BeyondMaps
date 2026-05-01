@@ -33,24 +33,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
 import com.beyondmaps.R
 import com.beyondmaps.ui.components.AtmosphereBackground
+import com.beyondmaps.ui.components.BeyondMapsBrandTitle
 import com.beyondmaps.ui.components.FeatureCard
 import com.beyondmaps.ui.theme.AccentBlue
 import com.beyondmaps.ui.theme.AccentPurple
-import com.beyondmaps.ui.theme.BorderSubtle
 import com.beyondmaps.ui.theme.TextDim
 import com.beyondmaps.ui.theme.TextGhost
 import com.beyondmaps.ui.theme.TextPrimary
-import com.beyondmaps.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -95,14 +91,7 @@ fun HomeScreen(navController: NavHostController) {
                 .navigationBarsPadding()
                 .padding(horizontal = 24.dp, vertical = 24.dp),
         ) {
-            Text(
-                text = buildAnnotatedString {
-                    withStyle(SpanStyle(color = TextPrimary)) { append("Beyond") }
-                    append(" ")
-                    withStyle(SpanStyle(color = AccentBlue)) { append("Maps") }
-                },
-                style = MaterialTheme.typography.displayLarge,
-            )
+            BeyondMapsBrandTitle(textStyle = MaterialTheme.typography.displayLarge)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Navigate anywhere. Even without signal.",
@@ -112,7 +101,7 @@ fun HomeScreen(navController: NavHostController) {
 
             Spacer(modifier = Modifier.height(20.dp))
             DestinationStatusCard(
-                destination = "Tokyo, Japan",
+                destination = "Florence, Italy",
                 status = "Ready",
             )
 
@@ -130,11 +119,6 @@ fun HomeScreen(navController: NavHostController) {
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
-
-            Spacer(modifier = Modifier.height(18.dp))
-            OfflineTrustBadge(
-                text = "On-device AI \u00b7 No connection required",
-            )
         }
     }
 }
@@ -193,25 +177,3 @@ private fun DestinationStatusCard(
     }
 }
 
-@Composable
-private fun OfflineTrustBadge(text: String) {
-    Row(
-        modifier = Modifier
-            .background(Color(0x121A3559), RoundedCornerShape(999.dp))
-            .border(0.5.dp, BorderSubtle.copy(alpha = 0.6f), RoundedCornerShape(999.dp))
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(6.dp)
-                .background(Color(0xFF5ED5F6), CircleShape),
-        )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.3.sp),
-            color = TextSecondary,
-        )
-    }
-}
