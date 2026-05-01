@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -157,6 +158,12 @@ fun HomeScreen(navController: NavHostController) {
             OfflineTrustBadge(
                 text = "On-device AI \u00b7 No connection required",
             )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { navController.navigate("translator") },
+            ) {
+                Text("Translator")
+            }
         }
     }
 }

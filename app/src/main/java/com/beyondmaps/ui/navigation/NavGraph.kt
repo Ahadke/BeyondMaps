@@ -13,6 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import com.beyondmaps.ui.screens.ChatScreen
 import com.beyondmaps.ui.screens.HomeScreen
 import com.beyondmaps.ui.screens.StubScreen
+import com.beyondmaps.ui.screens.TranslatorScreen
 
 @Composable
 fun NavGraph(navController: NavHostController = rememberNavController()) {
@@ -29,5 +30,6 @@ fun NavGraph(navController: NavHostController = rememberNavController()) {
         composable("menu_scan") { StubScreen(title = "Menu Scan", navController = navController) }
         composable("cultural_tips") { StubScreen(title = "Cultural Tips", navController = navController) }
         composable("phrases") { StubScreen(title = "Phrases", navController = navController) }
+        composable("translator") { TranslatorScreen() }
     }
 }
