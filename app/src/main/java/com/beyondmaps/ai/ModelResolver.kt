@@ -9,11 +9,6 @@ import java.io.File
  */
 class ModelResolver(private val context: Context) {
 
-    private fun modelDir(): File {
-        return context.getExternalFilesDir(null)
-            ?: File("/sdcard/Android/data/${context.packageName}/files")
-    }
-
     fun modelExists(): Boolean {
         val modelFile = getModelFile()
         return modelFile.exists() && modelFile.canRead() && modelFile.length() > 0
@@ -23,7 +18,8 @@ class ModelResolver(private val context: Context) {
         val modelFile = getModelFile()
         if (!modelExists()) {
             throw IllegalStateException(
-                "LiteRT-LM model is missing. Expected $MODEL_FILENAME at ${modelFile.absolutePath}"
+                "LiteRT-LM model is missing. Expected model.litertlm at ${modelFile.absolutePath}. " +
+                    "If your source file is in another app folder, copy it into this app's folder first."
             )
         }
         return modelFile.absolutePath
@@ -31,10 +27,19 @@ class ModelResolver(private val context: Context) {
 
     fun expectedPath(): String = getModelFile().absolutePath
 
-    /**
-     * Primary travel/chat model (e.g. Gemma packaged as model.litertlm).
-     */
-    private fun getModelFile(): File = File(modelDir(), MODEL_FILENAME)
+    private fun getModelFile(): File {
+        val appSpecificModel = File(resolveAppSpecificDir(), MODEL_FILENAME)
+        if (appSpecificModel.exists() && appSpecificModel.canRead() && appSpecificModel.length() > 0) {
+            return appSpecificModel
+        }
+
+        val legacyModel = File(LEGACY_MODEL_PATH)
+        if (legacyModel.exists() && legacyModel.canRead() && legacyModel.length() > 0) {
+            return legacyModel
+        }
+
+        return appSpecificModel
+    }
 
     /**
      * FastVLM for on-device vision/OCR. Tries common filenames in order.
@@ -44,21 +49,26 @@ class ModelResolver(private val context: Context) {
     fun getFastVlmModelPath(): String {
         val file = resolveFastVlmFile()
             ?: throw IllegalStateException(
-                "FastVLM model is missing. Place one of ${FASTVLM_CANDIDATES.joinToString()} under ${modelDir().absolutePath}"
+                "FastVLM model is missing. Place one of ${FASTVLM_CANDIDATES.joinToString()} under ${resolveAppSpecificDir().absolutePath}"
             )
         return file.absolutePath
     }
 
     fun expectedFastVlmPathHint(): String =
-        "${modelDir().absolutePath}/ (${FASTVLM_CANDIDATES.joinToString(" or ")})"
+        "${resolveAppSpecificDir().absolutePath}/ (${FASTVLM_CANDIDATES.joinToString(" or ")})"
 
     private fun resolveFastVlmFile(): File? {
-        val dir = modelDir()
+        val dir = resolveAppSpecificDir()
         for (name in FASTVLM_CANDIDATES) {
             val f = File(dir, name)
             if (f.exists() && f.canRead() && f.length() > 0) return f
         }
         return null
+    }
+
+    private fun resolveAppSpecificDir(): File {
+        return context.getExternalFilesDir(null)
+            ?: File("/sdcard/Android/data/${context.packageName}/files")
     }
 
     private companion object {
@@ -70,5 +80,7 @@ class ModelResolver(private val context: Context) {
             "FastVLM-0.5B.litertlm",
             "fastvlm.litertlm",
         )
+        const val LEGACY_MODEL_PATH =
+            "/sdcard/Android/data/com.example.qnn_litertlm_gemma/files/model.litertlm"
     }
 }
