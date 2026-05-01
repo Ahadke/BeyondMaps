@@ -1,6 +1,10 @@
 package com.beyondmaps.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -23,11 +27,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,19 +63,26 @@ fun FeatureCard(
         ),
         label = "cardScale",
     )
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(22.dp)
+    val breathingTransition = rememberInfiniteTransition(label = "cardEdgeGlow")
+    val edgeGlowAlpha by breathingTransition.animateFloat(
+        initialValue = 0.12f,
+        targetValue = 0.28f,
+        animationSpec = infiniteRepeatable(animation = tween(2600)),
+        label = "edgeGlowAlpha",
+    )
     val cardBackground = Brush.linearGradient(
         colors = if (isPressed) {
             listOf(
-                Color(0x18223855),
-                Color(0x14263E67),
-                Color(0x102A3E5A),
+                Color(0x1A1F3150),
+                Color(0x14294576),
+                Color(0x10243A60),
             )
         } else {
             listOf(
-                Color(0x14243A56),
-                Color(0x10283E63),
-                Color(0x0E253B54),
+                Color(0x161D2D49),
+                Color(0x1226406A),
+                Color(0x0F233959),
             )
         }
     )
@@ -84,7 +98,14 @@ fun FeatureCard(
             }
             .clip(shape)
             .background(cardBackground)
-            .border(0.7.dp, Color.White.copy(alpha = 0.16f), shape)
+            .border(0.7.dp, Color.White.copy(alpha = 0.15f), shape)
+            .drawBehind {
+                drawRoundRect(
+                    color = accentColor.copy(alpha = edgeGlowAlpha),
+                    cornerRadius = CornerRadius(22.dp.toPx(), 22.dp.toPx()),
+                    style = Stroke(width = 1.4.dp.toPx()),
+                )
+            }
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -92,49 +113,33 @@ fun FeatureCard(
             )
             .padding(14.dp)
     ) {
-        // One subtle accent bloom; kept small to avoid nested-card appearance.
-        Box(
-            modifier = Modifier
-                .size(width = 92.dp, height = 68.dp)
-                .align(Alignment.TopStart)
-                .background(
-                    brush = Brush.radialGradient(
-                        listOf(
-                            accentColor.copy(alpha = if (isPressed) 0.25f else 0.2f),
-                            accentColor.copy(alpha = 0.07f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-
         Column(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(accentColor.copy(alpha = 0.24f))
-                    .border(0.5.dp, accentColor.copy(alpha = 0.4f), RoundedCornerShape(9.dp))
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accentColor.copy(alpha = 0.2f))
+                    .border(0.6.dp, accentColor.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
             ) {
                 Image(
                     painter = icon,
                     contentDescription = label,
                     modifier = Modifier
-                        .size(14.dp)
+                        .size(15.dp)
                         .padding(0.dp)
                         .align(androidx.compose.ui.Alignment.Center)
                 )
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(11.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.5.sp),
                 color = TextPrimary,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(5.dp))
             Text(
                 text = description,
                 style = MaterialTheme.typography.labelMedium,
