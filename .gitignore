@@ -15,3 +15,12 @@ Reference/
 .tmp/
 .hf-cache/
 artifacts/
+# RAG local/temp files
+.cache/
+.tmp/
+florence_pack_fixed.json
+
+# RAG local/temp files
+.cache/
+.tmp/
+florence_pack_fixed.json
