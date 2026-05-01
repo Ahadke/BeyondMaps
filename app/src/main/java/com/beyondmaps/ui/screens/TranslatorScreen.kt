@@ -25,7 +25,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -39,6 +42,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -49,19 +53,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
+import com.beyondmaps.R
 import com.beyondmaps.ai.BeyondMapsChatbot
 import com.beyondmaps.ui.components.AtmosphereBackground
 import com.beyondmaps.ui.theme.AccentBlue
+import com.beyondmaps.ui.theme.AccentPurple
 import com.beyondmaps.ui.theme.BorderSubtle
 import com.beyondmaps.ui.theme.TextDim
+import com.beyondmaps.ui.theme.TextGhost
 import com.beyondmaps.ui.theme.TextPrimary
 import com.beyondmaps.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
@@ -80,11 +94,20 @@ fun TranslatorScreen() {
     var isModelReady by remember { mutableStateOf(false) }
     var isTranslating by remember { mutableStateOf(false) }
     var isListening by remember { mutableStateOf(false) }
-    var isLanguageMenuExpanded by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
     val chatbot = remember { BeyondMapsChatbot(context) }
+    val softBorder = BorderSubtle.copy(alpha = 0.26f)
+    val iconBorder = BorderSubtle.copy(alpha = 0.22f)
+    val cardGlass = Brush.linearGradient(
+        colors = listOf(
+            Color(0x141A2740),
+            Color(0x1020304A),
+            Color(0x0F141E34),
+        ),
+    )
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     val defaultLanguages = remember {
         listOf(
@@ -95,6 +118,8 @@ fun TranslatorScreen() {
     }
     var availableLanguages by remember { mutableStateOf(defaultLanguages) }
     var selectedTargetLanguage by remember { mutableStateOf(defaultLanguages[1]) }
+    var isToMenuExpanded by remember { mutableStateOf(false) }
+    var toSelectorSize by remember { mutableStateOf(IntSize.Zero) }
 
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -274,37 +299,58 @@ fun TranslatorScreen() {
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "Voice Translator",
-                style = MaterialTheme.typography.headlineMedium,
-                color = TextPrimary,
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(color = TextPrimary)) { append("Voice") }
+                    append(" ")
+                    withStyle(SpanStyle(color = AccentBlue)) { append("Translator") }
+                },
+                style = MaterialTheme.typography.displayLarge,
             )
 
             Text(
-                text = "1) Speak/type input  2) Choose target language  3) Translate",
-                style = MaterialTheme.typography.bodyMedium,
+                text = "Speak, translate, and communicate offline",
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Light),
                 color = TextDim,
             )
 
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0x0CFFFFFF),
+                    containerColor = Color.Transparent,
                 ),
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.border(0.6.dp, BorderSubtle, RoundedCornerShape(18.dp)),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.border(0.5.dp, softBorder, RoundedCornerShape(20.dp)),
             ) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(cardGlass)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Input", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+                        Text("Input", style = MaterialTheme.typography.labelLarge, color = TextGhost)
                         Spacer(modifier = Modifier.weight(1f))
-                        IconButton(onClick = { startVoiceInput() }) {
-                            Text("🎤", color = AccentBlue)
+                        Box(
+                            modifier = Modifier
+                                .background(AccentBlue.copy(alpha = 0.14f), RoundedCornerShape(10.dp))
+                                .border(0.5.dp, iconBorder, RoundedCornerShape(10.dp)),
+                        ) {
+                            IconButton(onClick = { startVoiceInput() }) {
+                                Image(
+                                    painter = painterResource(R.drawable.ic_mic),
+                                    contentDescription = "Microphone",
+                                    modifier = Modifier
+                                        .width(16.dp)
+                                        .height(16.dp),
+                                )
+                            }
                         }
                     }
                     OutlinedTextField(
@@ -313,38 +359,83 @@ fun TranslatorScreen() {
                         label = { Text("Tap mic on keyboard or type") },
                         placeholder = { Text("Speak or type any language...") },
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
+                        minLines = 2,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentBlue.copy(alpha = 0.55f),
+                            unfocusedBorderColor = softBorder,
+                            focusedLabelColor = TextSecondary,
+                            unfocusedLabelColor = TextDim,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                        ),
+                    )
+                    Text(
+                        text = "Use keyboard mic or tap Speak",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextDim,
                     )
                 }
             }
 
             ExposedDropdownMenuBox(
-                expanded = isLanguageMenuExpanded,
-                onExpandedChange = { isLanguageMenuExpanded = !isLanguageMenuExpanded },
+                expanded = isToMenuExpanded,
+                onExpandedChange = { isToMenuExpanded = !isToMenuExpanded },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                OutlinedTextField(
-                    value = selectedTargetLanguage.label,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Translate to") },
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = isLanguageMenuExpanded)
-                    },
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
-                )
+                        .menuAnchor()
+                        .onGloballyPositioned { coordinates ->
+                            toSelectorSize = coordinates.size
+                        }
+                        .border(0.5.dp, softBorder, RoundedCornerShape(16.dp)),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(cardGlass),
+                    ) {
+                    OutlinedTextField(
+                        value = selectedTargetLanguage.label,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("To") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = isToMenuExpanded)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedLabelColor = TextSecondary,
+                            unfocusedLabelColor = TextDim,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                        ),
+                    )
+                    }
+                }
                 DropdownMenu(
-                    expanded = isLanguageMenuExpanded,
-                    onDismissRequest = { isLanguageMenuExpanded = false },
+                    expanded = isToMenuExpanded,
+                    onDismissRequest = { isToMenuExpanded = false },
+                    modifier = Modifier
+                        .width(with(density) { toSelectorSize.width.toDp() })
+                        .background(Color(0xF0131824), RoundedCornerShape(12.dp))
+                        .border(0.5.dp, softBorder, RoundedCornerShape(12.dp)),
                 ) {
                     availableLanguages.forEach { language ->
                         DropdownMenuItem(
                             text = { Text(language.label) },
                             onClick = {
                                 selectedTargetLanguage = language
-                                isLanguageMenuExpanded = false
+                                isToMenuExpanded = false
                             },
                         )
                     }
@@ -374,56 +465,101 @@ fun TranslatorScreen() {
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isTranslating,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0x1A72A4FF),
-                    disabledContainerColor = Color(0x0F72A4FF),
+                    containerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
                 ),
+                shape = RoundedCornerShape(14.dp),
             ) {
-                Text(if (isTranslating) "Translating..." else "Translate", color = TextPrimary)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFF355F9B), Color(0xFF2D4E82)),
+                            ),
+                            RoundedCornerShape(14.dp),
+                        )
+                        .border(0.5.dp, softBorder, RoundedCornerShape(14.dp))
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(if (isTranslating) "Translating..." else "Translate", color = TextPrimary)
+                }
             }
 
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0x0CFFFFFF),
+                    containerColor = Color.Transparent,
                 ),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(20.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f, fill = false)
-                    .border(0.6.dp, BorderSubtle, RoundedCornerShape(18.dp)),
+                    .border(0.5.dp, softBorder, RoundedCornerShape(20.dp)),
             ) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(cardGlass)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Translation", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+                        Text("Translation", style = MaterialTheme.typography.labelLarge, color = TextGhost)
                         Spacer(modifier = Modifier.weight(1f))
-                        IconButton(
-                            onClick = {
-                                val textToSpeak = extractSpeakText(outputText)
-                                tts?.language = selectedTargetLanguage.locale
-                                tts?.speak(
-                                    textToSpeak,
-                                    TextToSpeech.QUEUE_FLUSH,
-                                    null,
-                                    "translation_output",
-                                )
-                            },
-                            enabled = outputText.isNotBlank(),
+                        Box(
+                            modifier = Modifier
+                                .background(AccentPurple.copy(alpha = 0.14f), RoundedCornerShape(10.dp))
+                                .border(0.5.dp, iconBorder, RoundedCornerShape(10.dp)),
                         ) {
-                            Text(
-                                text = "🔊",
-                                color = if (outputText.isNotBlank()) AccentBlue else TextDim,
-                            )
+                            IconButton(
+                                onClick = {
+                                    val textToSpeak = extractSpeakText(outputText)
+                                    tts?.language = selectedTargetLanguage.locale
+                                    tts?.speak(
+                                        textToSpeak,
+                                        TextToSpeech.QUEUE_FLUSH,
+                                        null,
+                                        "translation_output",
+                                    )
+                                },
+                                enabled = outputText.isNotBlank(),
+                            ) {
+                                Image(
+                                    painter = painterResource(R.drawable.ic_speaker),
+                                    contentDescription = "Speak translation",
+                                    modifier = Modifier
+                                        .width(16.dp)
+                                        .height(16.dp),
+                                )
+                            }
                         }
                     }
+
+                    val parsedTranslation = extractSpeakText(outputText)
+                    val pronunciation = outputText.substringAfter("Pronunciation:", "").trim()
+
+                    Text("Text", style = MaterialTheme.typography.labelSmall, color = TextDim)
                     Text(
-                        text = if (outputText.isBlank()) "Translation output appears here." else outputText,
+                        text = if (outputText.isBlank()) "Translation output appears here." else parsedTranslation.ifBlank { outputText },
                         style = MaterialTheme.typography.bodyLarge,
                         color = TextPrimary,
                     )
+                    if (pronunciation.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Pronunciation", style = MaterialTheme.typography.labelSmall, color = TextDim)
+                        Text(
+                            text = pronunciation,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary,
+                        )
+                    }
                 }
             }
+
         }
     }
 }
