@@ -66,7 +66,7 @@ private data class HomeFeature(
 fun HomeScreen(navController: NavHostController) {
     val features = listOf(
         HomeFeature("Travel Guide", "Ask anything, get local answers", AccentBlue, "chat", R.drawable.ic_guide),
-        HomeFeature("Phrases", "Say the right thing", AccentPurple, "phrases", R.drawable.ic_phrases),
+        HomeFeature("Translator", "Get relevant phrases instantly", AccentPurple, "phrases", R.drawable.ic_phrases),
     )
     val alphas = remember { List(features.size) { Animatable(0f) } }
     val offsets = remember { List(features.size) { Animatable(14f) } }
