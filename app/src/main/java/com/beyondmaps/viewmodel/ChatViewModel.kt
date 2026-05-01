@@ -31,6 +31,7 @@ sealed class ChatMessage {
     data class User(
         val text: String,
         val hadImageAttachment: Boolean = false,
+        val imageUri: Uri? = null,
     ) : ChatMessage()
 }
 
@@ -103,7 +104,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val hadImage = imageUri != null
         _pendingImageUri.value = null
 
-        _messages.value = _messages.value + ChatMessage.User(userDisplay, hadImageAttachment = hadImage)
+        _messages.value = _messages.value + ChatMessage.User(
+            text = userDisplay,
+            hadImageAttachment = hadImage,
+            imageUri = imageUri,
+        )
         inputText.value = ""
         _isThinking.value = true
 

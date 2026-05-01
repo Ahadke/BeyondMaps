@@ -193,7 +193,7 @@ fun ChatScreen(
                         ) {
                             when (msg) {
                                 is ChatMessage.Ai -> AiBubble(msg.text, msg.sources, msg.isOcr)
-                                is ChatMessage.User -> UserBubble(msg.text, msg.hadImageAttachment)
+                                is ChatMessage.User -> UserBubble(msg.text, msg.hadImageAttachment, msg.imageUri)
                             }
                         }
                     }

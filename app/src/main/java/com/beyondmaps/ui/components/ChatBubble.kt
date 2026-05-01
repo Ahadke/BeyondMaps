@@ -1,5 +1,8 @@
 package com.beyondmaps.ui.components
 
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -14,10 +17,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -32,6 +44,8 @@ import com.beyondmaps.ui.theme.BorderCard
 import com.beyondmaps.ui.theme.BorderUser
 import com.beyondmaps.ui.theme.HighlightBlue
 import com.beyondmaps.ui.theme.TextSecondary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun AiBubble(text: String, sources: List<String>?, isOcr: Boolean = false) {
@@ -121,13 +135,37 @@ fun AiBubble(text: String, sources: List<String>?, isOcr: Boolean = false) {
 }
 
 @Composable
-fun UserBubble(text: String, hadImageAttachment: Boolean = false) {
+fun UserBubble(text: String, hadImageAttachment: Boolean = false, imageUri: Uri? = null) {
+    val context = LocalContext.current
+    var bitmap by remember(imageUri) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(imageUri) {
+        bitmap = if (imageUri == null) {
+            null
+        } else {
+            withContext(Dispatchers.IO) {
+                context.contentResolver.openInputStream(imageUri)?.use { input ->
+                    BitmapFactory.decodeStream(input)?.asImageBitmap()
+                }
+            }
+        }
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (hadImageAttachment) {
+        if (hadImageAttachment && bitmap != null) {
+            Image(
+                bitmap = bitmap!!,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(34.dp)
+                    .padding(end = 6.dp)
+                    .background(Color(0x1A2C4F86), RoundedCornerShape(8.dp))
+                    .border(0.5.dp, BorderUser, RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Crop,
+            )
+        } else if (hadImageAttachment) {
             Text(
                 text = "📷",
                 modifier = Modifier.padding(end = 6.dp),
