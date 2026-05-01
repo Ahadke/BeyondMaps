@@ -91,16 +91,17 @@ class BeyondMapsChatbot(private val context: Context) {
 
     private fun buildOcrPrompt(userQuery: String): String {
         val q = userQuery.trim().ifBlank {
-            "Extract all visible text from the image. Preserve line breaks where possible."
+            "Transcribe all visible text from the image exactly."
         }
         return buildString {
-            appendLine(
-                "You are an OCR assistant. Follow these rules strictly:",
-            )
-            appendLine("- Output only the text relevant to the user's request (or full transcript if asked).")
-            appendLine("- Preserve reading order and line breaks when possible.")
-            appendLine("- If a word is unclear, write [unclear] for that fragment.")
-            appendLine("- Do not add commentary before or after the extracted content unless the user explicitly asks for explanation.")
+            appendLine("Task: OCR transcription from image.")
+            appendLine("Rules (strict):")
+            appendLine("1) Output only transcribed text. No explanation, no summary.")
+            appendLine("2) Preserve reading order and line breaks.")
+            appendLine("3) Keep original casing, punctuation, and numbers exactly.")
+            appendLine("4) Never invent or complete missing words.")
+            appendLine("5) If a token is not readable, write [unclear].")
+            appendLine("6) If no text is visible, output exactly: [unreadable].")
             appendLine()
             appendLine("User request: $q")
         }
@@ -112,6 +113,6 @@ class BeyondMapsChatbot(private val context: Context) {
             "You are BeyondMaps, an offline travel assistant. Reply clearly and briefly."
 
         private const val OCR_SYSTEM_PROMPT =
-            "You extract text from images accurately and concisely. Output only what the user asked for unless they request formatting help."
+            "You are a strict OCR transcription engine. Return only faithful text from the image. Do not infer, paraphrase, translate, or explain unless explicitly requested."
     }
 }
