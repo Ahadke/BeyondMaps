@@ -25,6 +25,7 @@ data class KnowledgeChunkRaw(
     val category: String? = null,
     val source: String? = null,
     val lat: Double? = null,
+    val lng: Double? = null,
     val lon: Double? = null,
 )
 
@@ -61,7 +62,9 @@ data class VectorChunk(
     val lat: Double?,
     val lon: Double?,
     val embedding: FloatArray,
-)
+) {
+    fun hasCoordinates(): Boolean = lat != null && lon != null
+}
 
 data class LoadedVectorPack(
     val chunks: List<VectorChunk>,
